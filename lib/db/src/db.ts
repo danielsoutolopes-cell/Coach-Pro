@@ -2,12 +2,16 @@ import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
 import * as schema from "./schema/index.js"; // Importa todos os seus schemas
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString =
+  process.env.DATABASE_URL ??
+  process.env.NEON_DATABASE_URL ??
+  process.env.POSTGRES_URL ??
+  process.env.POSTGRES_URL_NON_POOLING;
 
 if (!connectionString) {
-  // Em um ambiente de produção, você pode querer um tratamento de erro mais robusto
-  // ou garantir que a variável de ambiente esteja sempre presente.
-  throw new Error("DATABASE_URL is not set in lib/db/src/db.ts");
+  throw new Error(
+    "Database connection string is not set. Set DATABASE_URL (recommended) or NEON_DATABASE_URL/POSTGRES_URL.",
+  );
 }
 
 const sql = neon(connectionString);
