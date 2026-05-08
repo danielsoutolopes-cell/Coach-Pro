@@ -744,12 +744,20 @@ router.post("/telegram/setup-webhook", async (req: Request, res: Response) => {
     res.status(500).json({ error: "TELEGRAM_BOT_TOKEN not set" });
     return;
   }
-  const domains = (process.env.REPLIT_DOMAINS ?? "").split(",")[0]?.trim();
-  if (!domains) {
-    res.status(500).json({ error: "REPLIT_DOMAINS not set" });
+  const publicBaseUrl =
+    process.env.PUBLIC_BASE_URL ??
+    process.env.RENDER_EXTERNAL_URL ??
+    ((process.env.REPLIT_DOMAINS ?? "").split(",")[0]?.trim()
+      ? `https://${(process.env.REPLIT_DOMAINS ?? "").split(",")[0]!.trim()}`
+      : undefined);
+
+  if (!publicBaseUrl) {
+    res.status(500).json({ error: "PUBLIC_BASE_URL (recommended) or RENDER_EXTERNAL_URL or REPLIT_DOMAINS not set" });
     return;
   }
-  const webhookUrl = `https://${domains}/api/telegram/webhook`;
+
+  const base = publicBaseUrl.replace(/\/+$/, "");
+  const webhookUrl = `${base}/api/telegram/webhook`;
   const r = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
