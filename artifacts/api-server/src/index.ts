@@ -37,6 +37,9 @@ await loadEnvFiles([
   path.resolve(currentDir, "../../.env"),
 ]);
 
+const { initSentry } = await import("./instrument");
+initSentry();
+
 const { default: app } = await import("./app");
 const { logger } = await import("./lib/logger");
 
