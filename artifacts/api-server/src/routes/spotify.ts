@@ -7,12 +7,31 @@ const router: IRouter = Router();
 let cachedToken: string | null = null;
 let tokenExpiresAt = 0;
 
+class SpotifyError extends Error {
+  statusCode: number;
+  publicMessage: string;
+
+  constructor(opts: { message: string; statusCode: number; publicMessage?: string }) {
+    super(opts.message);
+    this.name = "SpotifyError";
+    this.statusCode = opts.statusCode;
+    this.publicMessage = opts.publicMessage ?? "Spotify unavailable";
+  }
+}
+
 async function getAccessToken(): Promise<string> {
   if (cachedToken && Date.now() < tokenExpiresAt - 60_000) {
     return cachedToken;
   }
-  const clientId     = process.env.SPOTIFY_CLIENT_ID!;
-  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET!;
+  const clientId = process.env.SPOTIFY_CLIENT_ID;
+  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    throw new SpotifyError({
+      message: "Spotify credentials not configured (missing SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET)",
+      statusCode: 500,
+      publicMessage: "Spotify not configured",
+    });
+  }
   const creds = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 
   const res = await fetch("https://accounts.spotify.com/api/token", {
@@ -23,7 +42,20 @@ async function getAccessToken(): Promise<string> {
     },
     body: "grant_type=client_credentials",
   });
-  if (!res.ok) throw new Error(`Spotify token error: ${res.status}`);
+  if (!res.ok) {
+    const contentType = res.headers.get("content-type") ?? "";
+    const body = contentType.includes("application/json") ? await res.json().catch(() => null) : await res.text().catch(() => "");
+    const details =
+      typeof body === "string"
+        ? body.trim()
+        : body && typeof body === "object"
+          ? JSON.stringify(body)
+          : "";
+    throw new SpotifyError({
+      message: `Spotify token error: ${res.status}${details ? ` - ${details}` : ""}`,
+      statusCode: 502,
+    });
+  }
   const data = (await res.json()) as { access_token: string; expires_in: number };
   cachedToken    = data.access_token;
   tokenExpiresAt = Date.now() + data.expires_in * 1000;
@@ -128,6 +160,10 @@ router.get("/spotify/playlist-for-workout", async (req: Request, res: Response) 
     res.json({ playlist, workoutLabel: config.label });
   } catch (err) {
     req.log.error({ err }, "Spotify playlist fetch failed");
+    if (err instanceof SpotifyError) {
+      res.status(err.statusCode).json({ error: err.publicMessage });
+      return;
+    }
     res.status(502).json({ error: "Spotify unavailable" });
   }
 });
