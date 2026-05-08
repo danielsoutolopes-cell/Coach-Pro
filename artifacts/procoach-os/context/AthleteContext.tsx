@@ -184,6 +184,29 @@ export function AthleteProvider({ children }: { children: React.ReactNode }) {
   const [recoveryBlock, setRecoveryBlockState] = useState<PostRaceRecovery | null>(null);
   const mountedRef = React.useRef(true);
 
+  function mergeRemoteAthlete(local: AthleteState, remote: any): AthleteState {
+    // O backend deve ser a fonte de verdade para a Prova Alvo (P1) e a semana atual.
+    // Isso evita que um estado local "zerado" (ex: AsyncStorage limpo) sobrescreva a prova no servidor
+    // quando o atleta já existe.
+    const nextProfile: AthleteProfile = {
+      ...local.profile,
+      name: remote?.name ?? local.profile.name,
+      targetRaceName: remote?.targetRaceName ?? local.profile.targetRaceName,
+      targetRaceDate: remote?.targetRaceDate ?? local.profile.targetRaceDate,
+      targetRaceDistanceKm: remote?.targetRaceDistanceKm ?? local.profile.targetRaceDistanceKm,
+      // "races" ainda é local (não persistido no backend), então preservamos o que existe no aparelho.
+      races: local.profile.races ?? [],
+    };
+
+    return {
+      ...local,
+      profile: nextProfile,
+      hrv: typeof remote?.hrv === "number" ? remote.hrv : local.hrv,
+      painLevel: typeof remote?.painLevel === "number" ? remote.painLevel : local.painLevel,
+      currentWeek: typeof remote?.currentWeek === "number" ? remote.currentWeek : local.currentWeek,
+    };
+  }
+
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
@@ -239,16 +262,35 @@ export function AthleteProvider({ children }: { children: React.ReactNode }) {
         const deviceId = await getDeviceId();
         if (!mountedRef.current) return;
         setDeviceId(deviceId);
-        await ProCoachAPI.syncAthlete({
-          deviceId,
-          name: localState.profile.name,
-          targetRaceName: localState.profile.targetRaceName,
-          targetRaceDate: localState.profile.targetRaceDate,
-          targetRaceDistanceKm: localState.profile.targetRaceDistanceKm,
-          hrv: localState.hrv,
-          painLevel: localState.painLevel,
-          currentWeek: localState.currentWeek,
-        });
+
+        // IMPORTANTE:
+        // Antes de "subir" o estado local, tenta carregar o atleta do backend.
+        // Se o atleta já existir lá, evitamos sobrescrever o targetRace* com defaults.
+        let remoteAthlete: any | null = null;
+        try {
+          const remoteRes = await ProCoachAPI.getAthlete(deviceId);
+          remoteAthlete = (remoteRes as any)?.athlete ?? null;
+        } catch {
+          remoteAthlete = null;
+        }
+
+        if (remoteAthlete) {
+          localState = mergeRemoteAthlete(localState, remoteAthlete);
+          if (!mountedRef.current) return;
+          setState(localState);
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(localState));
+        } else {
+          await ProCoachAPI.syncAthlete({
+            deviceId,
+            name: localState.profile.name,
+            targetRaceName: localState.profile.targetRaceName,
+            targetRaceDate: localState.profile.targetRaceDate,
+            targetRaceDistanceKm: localState.profile.targetRaceDistanceKm,
+            hrv: localState.hrv,
+            painLevel: localState.painLevel,
+            currentWeek: localState.currentWeek,
+          });
+        }
 
         const statsRes = await ProCoachAPI.getWeeklyStats(deviceId);
         const remoteWeeklyCompleted = statsRes.weeklyCompleted ?? {};
