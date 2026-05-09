@@ -7,7 +7,13 @@ const router: IRouter = Router();
 
 // ─── In-memory session state (single-user bot) ───────────────────────────────
 interface BotSession {
-  state: "idle" | "waiting_rpe" | "waiting_pain" | "waiting_bio_weight" | "waiting_bio_fat";
+  state:
+    | "idle"
+    | "waiting_rpe"
+    | "waiting_pain"
+    | "waiting_bio_weight"
+    | "waiting_bio_fat"
+    | "waiting_telemetry_json";
   largadaAt?: Date;
   rpe?: number;
   sessionDistanceKm?: number;
@@ -40,6 +46,26 @@ function fmtDuration(ms: number): string {
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
   return h > 0 ? `${h}h${m.toString().padStart(2, "0")}min` : `${m}min`;
+}
+
+function getSaoPauloDayKey(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
+function normalizeEntryDate(raw: string): string {
+  if (typeof raw !== "string") return getSaoPauloDayKey();
+  const t = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const parsed = new Date(t);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  return getSaoPauloDayKey();
+}
+
+function asNumberOrNull(val: unknown): number | null {
+  if (val === null || val === undefined || val === "") return null;
+  const n = typeof val === "number" ? val : Number(String(val).replace(",", ".").trim());
+  if (!Number.isFinite(n)) return null;
+  return n;
 }
 
 async function sendTelegram(chatId: string | number, text: string, replyMarkup?: object): Promise<void> {
@@ -128,6 +154,70 @@ async function getPrimaryAthlete() {
   return rows[0] ?? null;
 }
 
+let biometricsTableReady = false;
+async function ensureBiometricsTable(): Promise<void> {
+  if (biometricsTableReady) return;
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS procoach_biometrics (
+      id SERIAL PRIMARY KEY,
+      athlete_id INTEGER NOT NULL REFERENCES procoach_athletes(id) ON DELETE CASCADE,
+      weight_kg NUMERIC(6,2),
+      body_fat_pct NUMERIC(5,2),
+      recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  biometricsTableReady = true;
+}
+
+let bioimpedanceTableReady = false;
+async function ensureBioimpedanceTable(): Promise<void> {
+  if (bioimpedanceTableReady) return;
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS procoach_bioimpedance (
+      athlete_id INTEGER NOT NULL REFERENCES procoach_athletes(id) ON DELETE CASCADE,
+      entry_date VARCHAR(32) NOT NULL,
+      weight_kg NUMERIC(6,2),
+      body_fat_pct NUMERIC(5,2),
+      muscle_mass_kg NUMERIC(6,2),
+      body_water_pct NUMERIC(5,2),
+      visceral_fat NUMERIC(5,2),
+      metabolic_age INTEGER,
+      tmb_kcal INTEGER,
+      protein_pct NUMERIC(5,2),
+      bone_mass_kg NUMERIC(5,2),
+      health_notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (athlete_id, entry_date)
+    )
+  `);
+  await db.execute(sql`ALTER TABLE IF EXISTS procoach_bioimpedance ADD COLUMN IF NOT EXISTS health_notes TEXT`);
+  bioimpedanceTableReady = true;
+}
+
+let planTableReady = false;
+async function ensurePlanTable(): Promise<void> {
+  if (planTableReady) return;
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS procoach_plan_sessions (
+      athlete_id INTEGER NOT NULL REFERENCES procoach_athletes(id) ON DELETE CASCADE,
+      session_date VARCHAR(32) NOT NULL,
+      day_name VARCHAR(32),
+      activity VARCHAR(120) NOT NULL,
+      pace_target VARCHAR(32),
+      treadmill_speed VARCHAR(32),
+      rest_interval VARCHAR(32),
+      structure TEXT,
+      planned_km INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (athlete_id, session_date)
+    )
+  `);
+  await db.execute(sql`ALTER TABLE IF EXISTS procoach_plan_sessions ADD COLUMN IF NOT EXISTS planned_km INTEGER NOT NULL DEFAULT 0`);
+  planTableReady = true;
+}
+
 // ─── Groq AI intent classification ────────────────────────────────────────────
 async function classifyIntent(text: string): Promise<string> {
   const key = process.env.GROQ_API_KEY;
@@ -141,7 +231,7 @@ async function classifyIntent(text: string): Promise<string> {
         messages: [
           {
             role: "system",
-            content: `Classifica a mensagem do utilizador em UMA dessas categorias: MENU | CONSULTA | FIM | LARGADA | CHEGADA | BIOMETRIA | UNKNOWN. Responde APENAS com a categoria em maiúsculas, sem explicação.`,
+            content: `Classifica a mensagem do utilizador em UMA dessas categorias: MENU | CONSULTA | FIM | LARGADA | CHEGADA | BIOMETRIA | TELEMETRIA | PLANOHOJE | COMPLIANCE | UNKNOWN. Responde APENAS com a categoria em maiúsculas, sem explicação.`,
           },
           { role: "user", content: text },
         ],
@@ -287,7 +377,11 @@ async function sendMenu(chatId: string | number, intro: string) {
         { text: "🏁 CHEGADA", callback_data: "cmd_chegada" },
       ],
       [
+        { text: "📋 Plano de Hoje", callback_data: "cmd_plano_hoje" },
         { text: "📅 /plano", callback_data: "cmd_plano" },
+      ],
+      [
+        { text: "📈 Compliance", callback_data: "cmd_compliance" },
         { text: "⚖️ Biometria", callback_data: "cmd_bio" },
       ],
       [
@@ -296,6 +390,9 @@ async function sendMenu(chatId: string | number, intro: string) {
       ],
       [
         { text: "📊 Histórico 7 dias", callback_data: "cmd_historico" },
+      ],
+      [
+        { text: "🚀 Nova Telemetria", callback_data: "cmd_telemetria" },
       ],
     ],
   };
@@ -334,7 +431,7 @@ async function handleLargada(chatId: string | number) {
     const phase = getPhase(athlete.currentWeek);
     paceMsg = `🎯 Pace alvo: *${phase.paceTarget}*`;
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getSaoPauloDayKey();
     const todayWorkouts = await db
       .select()
       .from(workoutEntriesTable)
@@ -395,36 +492,44 @@ async function handlePainSelected(chatId: string | number, pain: number) {
 
   const athlete = await getPrimaryAthlete();
   if (athlete) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getSaoPauloDayKey();
     const week = athlete.currentWeek;
 
-    // Save workout entry
-    await db.insert(workoutEntriesTable).values({
-      athleteId: athlete.id,
-      entryDate: today,
-      distanceKm: roundKm(distKm > 0 ? distKm : 8),
-      type: "corrida",
-      durationMin: SESSION.largadaAt ? Math.round((Date.now() - SESSION.largadaAt.getTime()) / 60000) : 0,
-      week,
-      injuryAlert: pain > 2 ? `Dor: ${pain}/5 RPE: ${rpe}/10` : null,
-    });
+    const existing = await db
+      .select()
+      .from(workoutEntriesTable)
+      .where(sql`${workoutEntriesTable.athleteId} = ${athlete.id} AND ${workoutEntriesTable.entryDate} = ${today}`)
+      .limit(1);
+
+    if (existing.length === 0) {
+      // Save workout entry
+      await db.insert(workoutEntriesTable).values({
+        athleteId: athlete.id,
+        entryDate: today,
+        distanceKm: roundKm(distKm > 0 ? distKm : 8),
+        type: "corrida",
+        durationMin: SESSION.largadaAt ? Math.round((Date.now() - SESSION.largadaAt.getTime()) / 60000) : 0,
+        week,
+        injuryAlert: pain > 2 ? `Dor: ${pain}/5 RPE: ${rpe}/10` : null,
+      });
+    }
 
     // Update weekly stats
-    const existing = await db
+    const existingWeek = await db
       .select()
       .from(weeklyStatsTable)
       .where(sql`${weeklyStatsTable.athleteId} = ${athlete.id} AND ${weeklyStatsTable.week} = ${week}`)
       .limit(1);
 
     const addKm = roundKm(distKm > 0 ? distKm : 8);
-    if (existing.length > 0) {
+    if (existingWeek.length > 0) {
       await db.update(weeklyStatsTable)
         .set({
-          completedKm: existing[0].completedKm + addKm,
-          sessionsCount: existing[0].sessionsCount + 1,
+          completedKm: existingWeek[0].completedKm + addKm,
+          sessionsCount: existingWeek[0].sessionsCount + 1,
           updatedAt: new Date(),
         })
-        .where(eq(weeklyStatsTable.id, existing[0].id));
+        .where(eq(weeklyStatsTable.id, existingWeek[0].id));
     } else {
       await db.insert(weeklyStatsTable).values({
         athleteId: athlete.id,
@@ -499,6 +604,177 @@ async function handlePlano(chatId: string | number) {
   await sendTelegram(chatId, msg);
 }
 
+function getSaoPauloWeekStartKey(): string {
+  const nowSp = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+  const day = nowSp.getDay();
+  const daysSinceMonday = (day + 6) % 7;
+  const start = new Date(nowSp);
+  start.setDate(nowSp.getDate() - daysSinceMonday);
+  return start.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
+async function handlePlanoHoje(chatId: string | number) {
+  const athlete = await getPrimaryAthlete();
+  if (!athlete) {
+    await sendTelegram(chatId, "⚠️ Nenhum atleta encontrado. Abre o app ProCoach para sincronizar.");
+    return;
+  }
+  await ensurePlanTable();
+  const today = getSaoPauloDayKey();
+  const rows = await db.execute(sql`
+    SELECT session_date, day_name, activity, pace_target, treadmill_speed, rest_interval, structure, planned_km
+    FROM procoach_plan_sessions
+    WHERE athlete_id = ${athlete.id} AND session_date = ${today}
+    LIMIT 1
+  `) as { rows: Array<{
+    session_date: string;
+    day_name: string | null;
+    activity: string;
+    pace_target: string | null;
+    treadmill_speed: string | null;
+    rest_interval: string | null;
+    structure: string | null;
+    planned_km: number | string;
+  }> };
+
+  const s = rows.rows[0];
+  if (!s) {
+    await sendTelegram(chatId, `📋 *PLANO DE HOJE*\n\nHoje: *${today}*\n\nNenhum treino importado para hoje.`);
+    return;
+  }
+
+  const msg =
+    `📋 *PLANO DE HOJE*\n\n` +
+    `📆 Data: *${s.session_date}*\n` +
+    `🏃 Atividade: *${s.activity}*${Number(s.planned_km) > 0 ? ` · *${Number(s.planned_km)}km*` : ""}\n` +
+    (s.pace_target ? `🎯 Pace: *${s.pace_target}*\n` : "") +
+    (s.rest_interval ? `⏱️ Repouso: *${s.rest_interval}*\n` : "") +
+    (s.treadmill_speed ? `🏃‍♂️ Esteira: *${s.treadmill_speed}*\n` : "") +
+    (s.structure ? `\n🧩 *Estrutura:*\n${s.structure}\n` : "");
+
+  await sendTelegram(chatId, msg);
+}
+
+async function handleCompliance(chatId: string | number) {
+  const athlete = await getPrimaryAthlete();
+  if (!athlete) {
+    await sendTelegram(chatId, "⚠️ Nenhum atleta encontrado. Abre o app ProCoach para sincronizar.");
+    return;
+  }
+  await ensurePlanTable();
+  const from = getSaoPauloWeekStartKey();
+  const to = getSaoPauloDayKey();
+
+  const planned = await db.execute(sql`
+    SELECT COUNT(*)::int AS planned_sessions, COALESCE(SUM(planned_km), 0)::int AS planned_km
+    FROM procoach_plan_sessions
+    WHERE athlete_id = ${athlete.id}
+      AND session_date >= ${from}
+      AND session_date <= ${to}
+  `) as { rows: Array<{ planned_sessions: number; planned_km: number }> };
+
+  const completed = await db.execute(sql`
+    SELECT COUNT(*)::int AS completed_sessions, COALESCE(SUM(distance_km), 0)::int AS completed_km
+    FROM procoach_workout_entries
+    WHERE athlete_id = ${athlete.id}
+      AND entry_date >= ${from}
+      AND entry_date <= ${to}
+  `) as { rows: Array<{ completed_sessions: number; completed_km: number }> };
+
+  const ps = planned.rows[0]?.planned_sessions ?? 0;
+  const pk = planned.rows[0]?.planned_km ?? 0;
+  const cs = completed.rows[0]?.completed_sessions ?? 0;
+  const ck = completed.rows[0]?.completed_km ?? 0;
+
+  const sessPct = ps > 0 ? Math.round((cs / ps) * 100) : 0;
+  const kmPct = pk > 0 ? Math.round((ck / pk) * 100) : 0;
+
+  await sendTelegram(
+    chatId,
+    `📈 *COMPLIANCE DA SEMANA*\n\n` +
+      `🗓️ ${from} → ${to}\n\n` +
+      `📌 Sessões: *${cs}/${ps}*${ps > 0 ? ` (*${sessPct}%*)` : ""}\n` +
+      `📏 Km: *${ck}km/${pk}km*${pk > 0 ? ` (*${kmPct}%*)` : ""}\n\n` +
+      `_Consistência vence. Ajuste fino amanhã._`
+  );
+}
+
+async function handleTelemetriaPrompt(chatId: string | number) {
+  SESSION.state = "waiting_telemetry_json";
+  await sendTelegram(
+    chatId,
+    `🚀 *NOVA TELEMETRIA — BIOIMPEDÂNCIA*\n\n` +
+      `Envia o JSON completo (pode colar aqui).\n\n` +
+      `Exemplo (cola igual):\n` +
+      `{ "date": "2026-05-08", "weight": 75, "body_fat": 24.3, "muscle_mass": 54.1, "body_water": 54.1, "visceral_fat": 13.5, "metabolic_age": 43, "tmb": 1557, "protein": 17.6, "bone_mass": 3.09, "health_notes": "" }`
+  );
+}
+
+async function handleTelemetriaJson(chatId: string | number, payload: Record<string, unknown>) {
+  await ensureBioimpedanceTable();
+  const athlete = await getPrimaryAthlete();
+  if (!athlete) {
+    await sendTelegram(chatId, "⚠️ Nenhum atleta encontrado. Abre o app ProCoach para sincronizar.");
+    return;
+  }
+
+  const entryDate = normalizeEntryDate(String(payload.date ?? payload.entry_date ?? payload.entryDate ?? ""));
+  const weightKg = asNumberOrNull(payload.weight ?? payload.weight_kg ?? payload.weightKg);
+  const bodyFatPct = asNumberOrNull(payload.body_fat ?? payload.body_fat_pct ?? payload.bodyFat ?? payload.bodyFatPct);
+  const muscleMassKg = asNumberOrNull(payload.muscle_mass ?? payload.muscle_mass_kg ?? payload.muscleMass ?? payload.muscleMassKg);
+  const bodyWaterPct = asNumberOrNull(payload.body_water ?? payload.body_water_pct ?? payload.bodyWater ?? payload.bodyWaterPct);
+  const visceralFat = asNumberOrNull(payload.visceral_fat ?? payload.visceralFat);
+  const metabolicAgeRaw = asNumberOrNull(payload.metabolic_age ?? payload.metabolicAge);
+  const tmbRaw = asNumberOrNull(payload.tmb ?? payload.tmb_kcal ?? payload.tmbKcal);
+  const proteinPct = asNumberOrNull(payload.protein ?? payload.protein_pct ?? payload.proteinPct);
+  const boneMassKg = asNumberOrNull(payload.bone_mass ?? payload.bone_mass_kg ?? payload.boneMass ?? payload.boneMassKg);
+  const healthNotes = typeof payload.health_notes === "string" ? payload.health_notes : typeof payload.healthNotes === "string" ? payload.healthNotes : "";
+
+  if (!entryDate) {
+    await sendTelegram(chatId, "❌ JSON inválido: faltou `date` (ex.: 2026-05-08).");
+    return;
+  }
+  if (weightKg !== null && (weightKg < 30 || weightKg > 250)) { await sendTelegram(chatId, "❌ Peso fora do intervalo."); return; }
+  if (bodyFatPct !== null && (bodyFatPct < 0 || bodyFatPct > 70)) { await sendTelegram(chatId, "❌ Gordura fora do intervalo."); return; }
+
+  const metabolicAge = metabolicAgeRaw === null ? null : Math.max(0, Math.round(metabolicAgeRaw));
+  const tmbKcal = tmbRaw === null ? null : Math.max(0, Math.round(tmbRaw));
+
+  await db.execute(sql`
+    INSERT INTO procoach_bioimpedance
+      (athlete_id, entry_date, weight_kg, body_fat_pct, muscle_mass_kg, body_water_pct, visceral_fat, metabolic_age, tmb_kcal, protein_pct, bone_mass_kg, health_notes, created_at, updated_at)
+    VALUES
+      (${athlete.id}, ${entryDate}, ${weightKg}, ${bodyFatPct}, ${muscleMassKg}, ${bodyWaterPct}, ${visceralFat}, ${metabolicAge}, ${tmbKcal}, ${proteinPct}, ${boneMassKg}, ${healthNotes}, NOW(), NOW())
+    ON CONFLICT (athlete_id, entry_date)
+    DO UPDATE SET
+      weight_kg = EXCLUDED.weight_kg,
+      body_fat_pct = EXCLUDED.body_fat_pct,
+      muscle_mass_kg = EXCLUDED.muscle_mass_kg,
+      body_water_pct = EXCLUDED.body_water_pct,
+      visceral_fat = EXCLUDED.visceral_fat,
+      metabolic_age = EXCLUDED.metabolic_age,
+      tmb_kcal = EXCLUDED.tmb_kcal,
+      protein_pct = EXCLUDED.protein_pct,
+      bone_mass_kg = EXCLUDED.bone_mass_kg,
+      health_notes = EXCLUDED.health_notes,
+      updated_at = NOW()
+  `);
+
+  SESSION.state = "idle";
+  await sendTelegram(
+    chatId,
+    `✅ *Telemetria salva no Neon*\n\n` +
+      `📆 Data: *${entryDate}*\n` +
+      `🏋️ Peso: *${weightKg ?? "—"}kg*\n` +
+      `🔥 Gordura: *${bodyFatPct ?? "—"}%*\n` +
+      (muscleMassKg !== null ? `💪 Músculo: *${muscleMassKg}kg*\n` : "") +
+      (bodyWaterPct !== null ? `💧 Água: *${bodyWaterPct}%*\n` : "") +
+      (visceralFat !== null ? `🧠 Visceral: *${visceralFat}*\n` : "") +
+      (metabolicAge !== null ? `⏳ Idade metab.: *${metabolicAge}*\n` : "") +
+      (tmbKcal !== null ? `🔥 TMB: *${tmbKcal} kcal*\n` : "")
+  );
+}
+
 function buildProgressBar(done: number, total: number): string {
   const pct = total > 0 ? Math.min(1, done / total) : 0;
   const filled = Math.round(pct * 10);
@@ -543,6 +819,7 @@ async function handleBioFat(chatId: string | number, text: string) {
     return;
   }
 
+  await ensureBiometricsTable();
   await db.execute(
     sql`INSERT INTO procoach_biometrics (athlete_id, weight_kg, body_fat_pct, recorded_at)
         VALUES (${athlete.id}, ${weight}, ${fat}, NOW())`
@@ -566,7 +843,7 @@ async function handleMissao(chatId: string | number) {
     await sendTelegram(chatId, "⚠️ Nenhum atleta no sistema.");
     return;
   }
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getSaoPauloDayKey();
   const workouts = await db
     .select()
     .from(workoutEntriesTable)
@@ -611,10 +888,16 @@ router.post("/telegram/webhook", async (req: Request, res: Response) => {
         await handleLargada(cid);
       } else if (cmd === "cmd_chegada") {
         await handleChegada(cid);
+      } else if (cmd === "cmd_plano_hoje") {
+        await handlePlanoHoje(cid);
       } else if (cmd === "cmd_plano") {
         await handlePlano(cid);
+      } else if (cmd === "cmd_compliance") {
+        await handleCompliance(cid);
       } else if (cmd === "cmd_bio") {
         await handleBioPrompt(cid);
+      } else if (cmd === "cmd_telemetria") {
+        await handleTelemetriaPrompt(cid);
       } else if (cmd === "cmd_missao") {
         await handleMissao(cid);
       } else if (cmd === "cmd_clima") {
@@ -653,6 +936,15 @@ router.post("/telegram/webhook", async (req: Request, res: Response) => {
       await handleBioFat(msgChatId, text);
       return;
     }
+    if (SESSION.state === "waiting_telemetry_json") {
+      try {
+        const parsed = JSON.parse(text) as Record<string, unknown>;
+        await handleTelemetriaJson(msgChatId, parsed);
+      } catch {
+        await sendTelegram(msgChatId, "❌ Não consegui ler o JSON. Cola o JSON completo (começa com { e termina com }).");
+      }
+      return;
+    }
 
     // Commands
     const cmd = text.split("@")[0].toLowerCase().trim();
@@ -667,8 +959,20 @@ router.post("/telegram/webhook", async (req: Request, res: Response) => {
       await handlePlano(msgChatId);
       return;
     }
+    if (cmd === "/hoje" || cmd === "/planohoje") {
+      await handlePlanoHoje(msgChatId);
+      return;
+    }
+    if (cmd === "/compliance") {
+      await handleCompliance(msgChatId);
+      return;
+    }
     if (cmd === "/bio") {
       await handleBioPrompt(msgChatId);
+      return;
+    }
+    if (cmd === "/telemetria") {
+      await handleTelemetriaPrompt(msgChatId);
       return;
     }
     if (cmd === "/largada") {
@@ -693,6 +997,24 @@ router.post("/telegram/webhook", async (req: Request, res: Response) => {
       return;
     }
 
+    // Paste JSON directly (without /telemetria)
+    const trimmed = text.trim();
+    if (trimmed.startsWith("{") && trimmed.includes("\"date\"")) {
+      try {
+        const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+        const hasBio =
+          "weight" in parsed ||
+          "body_fat" in parsed ||
+          "muscle_mass" in parsed ||
+          "body_water" in parsed ||
+          "visceral_fat" in parsed;
+        if (hasBio) {
+          await handleTelemetriaJson(msgChatId, parsed);
+          return;
+        }
+      } catch {}
+    }
+
     // Parse bio shorthand: "bio peso=75 gordura=18"
     const bioMatch = text.match(/bio\s+peso[=:\s]+([\d,.]+)\s+gordura[=:\s]+([\d,.]+)/i);
     if (bioMatch) {
@@ -701,6 +1023,7 @@ router.post("/telegram/webhook", async (req: Request, res: Response) => {
       if (!isNaN(w) && !isNaN(f)) {
         const athlete = await getPrimaryAthlete();
         if (athlete) {
+          await ensureBiometricsTable();
           await db.execute(
             sql`INSERT INTO procoach_biometrics (athlete_id, weight_kg, body_fat_pct, recorded_at)
                 VALUES (${athlete.id}, ${w}, ${f}, NOW())`
@@ -727,6 +1050,12 @@ router.post("/telegram/webhook", async (req: Request, res: Response) => {
       await sendMenu(msgChatId, `${saudacao}\n\n🤖 *ProCoach OS* — Sistema Ativo.`);
     } else if (intent === "BIOMETRIA") {
       await handleBioPrompt(msgChatId);
+    } else if (intent === "TELEMETRIA") {
+      await handleTelemetriaPrompt(msgChatId);
+    } else if (intent === "PLANOHOJE") {
+      await handlePlanoHoje(msgChatId);
+    } else if (intent === "COMPLIANCE") {
+      await handleCompliance(msgChatId);
     } else {
       await sendTelegram(msgChatId,
         `🧠 Mensagem recebida.\n\nUsa /menu para ver os comandos disponíveis.`

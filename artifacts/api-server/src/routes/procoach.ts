@@ -89,6 +89,63 @@ async function ensurePlanTable(): Promise<void> {
   planTableReady = true;
 }
 
+let bioimpedanceTableReady = false;
+async function ensureBioimpedanceTable(): Promise<void> {
+  if (bioimpedanceTableReady) return;
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS procoach_bioimpedance (
+      athlete_id INTEGER NOT NULL REFERENCES procoach_athletes(id) ON DELETE CASCADE,
+      entry_date VARCHAR(32) NOT NULL,
+      weight_kg NUMERIC(6,2),
+      body_fat_pct NUMERIC(5,2),
+      muscle_mass_kg NUMERIC(6,2),
+      body_water_pct NUMERIC(5,2),
+      visceral_fat NUMERIC(5,2),
+      metabolic_age INTEGER,
+      tmb_kcal INTEGER,
+      protein_pct NUMERIC(5,2),
+      bone_mass_kg NUMERIC(5,2),
+      health_notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (athlete_id, entry_date)
+    )
+  `);
+  await db.execute(sql`
+    ALTER TABLE IF EXISTS procoach_bioimpedance
+      ADD COLUMN IF NOT EXISTS muscle_mass_kg NUMERIC(6,2)
+  `);
+  await db.execute(sql`
+    ALTER TABLE IF EXISTS procoach_bioimpedance
+      ADD COLUMN IF NOT EXISTS body_water_pct NUMERIC(5,2)
+  `);
+  await db.execute(sql`
+    ALTER TABLE IF EXISTS procoach_bioimpedance
+      ADD COLUMN IF NOT EXISTS visceral_fat NUMERIC(5,2)
+  `);
+  await db.execute(sql`
+    ALTER TABLE IF EXISTS procoach_bioimpedance
+      ADD COLUMN IF NOT EXISTS metabolic_age INTEGER
+  `);
+  await db.execute(sql`
+    ALTER TABLE IF EXISTS procoach_bioimpedance
+      ADD COLUMN IF NOT EXISTS tmb_kcal INTEGER
+  `);
+  await db.execute(sql`
+    ALTER TABLE IF EXISTS procoach_bioimpedance
+      ADD COLUMN IF NOT EXISTS protein_pct NUMERIC(5,2)
+  `);
+  await db.execute(sql`
+    ALTER TABLE IF EXISTS procoach_bioimpedance
+      ADD COLUMN IF NOT EXISTS bone_mass_kg NUMERIC(5,2)
+  `);
+  await db.execute(sql`
+    ALTER TABLE IF EXISTS procoach_bioimpedance
+      ADD COLUMN IF NOT EXISTS health_notes TEXT
+  `);
+  bioimpedanceTableReady = true;
+}
+
 function parsePtBrMonth(mon: string): number | null {
   const m = mon.toLowerCase().replace(".", "").trim();
   const map: Record<string, number> = {
@@ -124,6 +181,13 @@ function parsePlannedKmFromStrings(activity: string, structure: string | null, d
   const m = hay.match(/(\d+(?:[.,]\d+)?)\s*km/i);
   if (!m?.[1]) return 0;
   return Math.max(0, Math.round(Number(m[1].replace(",", "."))));
+}
+
+function asNumberOrNull(val: unknown): number | null {
+  if (val === null || val === undefined || val === "") return null;
+  const n = typeof val === "number" ? val : Number(String(val).replace(",", ".").trim());
+  if (!Number.isFinite(n)) return null;
+  return n;
 }
 
 function parsePlanImportText(text: string, year: number): Array<{
@@ -728,6 +792,110 @@ router.get("/procoach/athletes/:deviceId/weekly-stats", async (req: Request, res
   }
 
   res.json({ weeklyCompleted });
+});
+
+router.post("/procoach/athletes/:deviceId/bioimpedance", async (req: Request, res: Response) => {
+  const deviceId = String(req.params.deviceId);
+  await ensureBioimpedanceTable();
+
+  const athletes = await db
+    .select({ id: athletesTable.id })
+    .from(athletesTable)
+    .where(eq(athletesTable.deviceId, deviceId) as any)
+    .limit(1);
+  if (athletes.length === 0) { res.status(404).json({ error: "Athlete not found" }); return; }
+  const athleteId = athletes[0]!.id;
+
+  const body = req.body as Record<string, unknown>;
+  const entryDate = normalizeEntryDate(String(body.date ?? body.entryDate ?? ""));
+  const weightKg = asNumberOrNull(body.weight ?? body.weight_kg ?? body.weightKg);
+  const bodyFatPct = asNumberOrNull(body.body_fat ?? body.body_fat_pct ?? body.bodyFat ?? body.bodyFatPct);
+  const muscleMassKg = asNumberOrNull(body.muscle_mass ?? body.muscle_mass_kg ?? body.muscleMass ?? body.muscleMassKg);
+  const bodyWaterPct = asNumberOrNull(body.body_water ?? body.body_water_pct ?? body.bodyWater ?? body.bodyWaterPct);
+  const visceralFat = asNumberOrNull(body.visceral_fat ?? body.visceralFat);
+  const metabolicAgeRaw = asNumberOrNull(body.metabolic_age ?? body.metabolicAge);
+  const tmbRaw = asNumberOrNull(body.tmb ?? body.tmb_kcal ?? body.tmbKcal);
+  const proteinPct = asNumberOrNull(body.protein ?? body.protein_pct ?? body.proteinPct);
+  const boneMassKg = asNumberOrNull(body.bone_mass ?? body.bone_mass_kg ?? body.boneMass ?? body.boneMassKg);
+  const healthNotes =
+    typeof body.health_notes === "string"
+      ? body.health_notes
+      : typeof body.healthNotes === "string"
+        ? body.healthNotes
+        : typeof body.notes === "string"
+          ? body.notes
+          : "";
+
+  if (!entryDate) { res.status(400).json({ error: "date is required" }); return; }
+
+  const metabolicAge = metabolicAgeRaw === null ? null : Math.max(0, Math.round(metabolicAgeRaw));
+  const tmbKcal = tmbRaw === null ? null : Math.max(0, Math.round(tmbRaw));
+
+  if (weightKg !== null && (weightKg < 30 || weightKg > 250)) { res.status(400).json({ error: "weight out of range" }); return; }
+  if (bodyFatPct !== null && (bodyFatPct < 0 || bodyFatPct > 70)) { res.status(400).json({ error: "body_fat out of range" }); return; }
+  if (bodyWaterPct !== null && (bodyWaterPct < 0 || bodyWaterPct > 100)) { res.status(400).json({ error: "body_water out of range" }); return; }
+
+  const rows = await db.execute(sql`
+    INSERT INTO procoach_bioimpedance
+      (athlete_id, entry_date, weight_kg, body_fat_pct, muscle_mass_kg, body_water_pct, visceral_fat, metabolic_age, tmb_kcal, protein_pct, bone_mass_kg, health_notes, created_at, updated_at)
+    VALUES
+      (${athleteId}, ${entryDate}, ${weightKg}, ${bodyFatPct}, ${muscleMassKg}, ${bodyWaterPct}, ${visceralFat}, ${metabolicAge}, ${tmbKcal}, ${proteinPct}, ${boneMassKg}, ${healthNotes}, NOW(), NOW())
+    ON CONFLICT (athlete_id, entry_date)
+    DO UPDATE SET
+      weight_kg = EXCLUDED.weight_kg,
+      body_fat_pct = EXCLUDED.body_fat_pct,
+      muscle_mass_kg = EXCLUDED.muscle_mass_kg,
+      body_water_pct = EXCLUDED.body_water_pct,
+      visceral_fat = EXCLUDED.visceral_fat,
+      metabolic_age = EXCLUDED.metabolic_age,
+      tmb_kcal = EXCLUDED.tmb_kcal,
+      protein_pct = EXCLUDED.protein_pct,
+      bone_mass_kg = EXCLUDED.bone_mass_kg,
+      health_notes = EXCLUDED.health_notes,
+      updated_at = NOW()
+    RETURNING
+      entry_date, weight_kg, body_fat_pct, muscle_mass_kg, body_water_pct, visceral_fat, metabolic_age, tmb_kcal, protein_pct, bone_mass_kg, health_notes, updated_at
+  `) as { rows: Array<{
+    entry_date: string;
+    weight_kg: string | number | null;
+    body_fat_pct: string | number | null;
+    muscle_mass_kg: string | number | null;
+    body_water_pct: string | number | null;
+    visceral_fat: string | number | null;
+    metabolic_age: number | null;
+    tmb_kcal: number | null;
+    protein_pct: string | number | null;
+    bone_mass_kg: string | number | null;
+    health_notes: string | null;
+    updated_at: string;
+  }> };
+
+  res.json({ entry: rows.rows[0] ?? null });
+});
+
+router.get("/procoach/athletes/:deviceId/bioimpedance", async (req: Request, res: Response) => {
+  const deviceId = String(req.params.deviceId);
+  const limitParam = Math.max(1, Math.min(90, Number(req.query.limit) || 30));
+  await ensureBioimpedanceTable();
+
+  const athletes = await db
+    .select({ id: athletesTable.id })
+    .from(athletesTable)
+    .where(eq(athletesTable.deviceId, deviceId) as any)
+    .limit(1);
+  if (athletes.length === 0) { res.status(404).json({ error: "Athlete not found" }); return; }
+  const athleteId = athletes[0]!.id;
+
+  const rows = await db.execute(sql`
+    SELECT
+      entry_date, weight_kg, body_fat_pct, muscle_mass_kg, body_water_pct, visceral_fat, metabolic_age, tmb_kcal, protein_pct, bone_mass_kg, health_notes, updated_at
+    FROM procoach_bioimpedance
+    WHERE athlete_id = ${athleteId}
+    ORDER BY entry_date DESC
+    LIMIT ${limitParam}
+  `) as { rows: Array<Record<string, unknown>> };
+
+  res.json({ entries: rows.rows });
 });
 
 router.get("/procoach/athletes/:deviceId/gel-stock", async (req: Request, res: Response) => {

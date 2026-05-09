@@ -115,6 +115,13 @@ export default function CheckInScreen() {
     completedKm: number;
   }>(null);
 
+  const [bioLoading, setBioLoading] = useState(false);
+  const [bioSaving, setBioSaving] = useState(false);
+  const [bioJsonText, setBioJsonText] = useState<string>("");
+  const [bioResult, setBioResult] = useState<string>("");
+  const [bioEntries, setBioEntries] = useState<Array<Record<string, unknown>>>([]);
+  const latestBio = bioEntries[0] as any | undefined;
+
   // ── Notification state ─────────────────────────────────────────────────────
   const supported = notificationsSupported();
   const [weeklyPrefs, setWeeklyPrefs] = useState<WeeklyReportPrefs>({ enabled: false, hour: 9, minute: 0 });
@@ -157,6 +164,23 @@ export default function CheckInScreen() {
   useEffect(() => {
     refreshCompliance();
   }, [refreshCompliance]);
+
+  const refreshBio = useCallback(async () => {
+    if (!deviceId) return;
+    setBioLoading(true);
+    try {
+      const r = await ProCoachAPI.getBioimpedance(deviceId, 7);
+      setBioEntries(Array.isArray(r.entries) ? r.entries : []);
+    } catch {
+      setBioEntries([]);
+    } finally {
+      setBioLoading(false);
+    }
+  }, [deviceId]);
+
+  useEffect(() => {
+    refreshBio();
+  }, [refreshBio]);
 
   const hrvStatus = getHRVStatus(localHRV);
   const needsRecovery = shouldSuggestRecovery(localPain, localHRV);
@@ -285,6 +309,35 @@ export default function CheckInScreen() {
       Alert.alert("Erro ao consultar", String(e?.message ?? e ?? "Falha desconhecida"));
     } finally {
       setPlanChecking(false);
+    }
+  };
+
+  const handleSaveBio = async () => {
+    if (!deviceId) {
+      Alert.alert("Erro", "deviceId não encontrado. Feche e abra o app novamente.");
+      return;
+    }
+    const raw = bioJsonText.trim();
+    if (!raw) {
+      Alert.alert("Faltou o JSON", "Cole o JSON da bioimpedância aqui antes de salvar.");
+      return;
+    }
+    setBioSaving(true);
+    setBioResult("");
+    try {
+      const parsed = JSON.parse(raw) as any;
+      if (!parsed?.date && !parsed?.entry_date && !parsed?.entryDate) {
+        Alert.alert("JSON inválido", "Faltou o campo 'date' (ex.: 2026-05-08).");
+        return;
+      }
+      await ProCoachAPI.upsertBioimpedance(deviceId, parsed);
+      setBioResult("Bioimpedância salva no Neon.");
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await refreshBio();
+    } catch (e: any) {
+      Alert.alert("Erro ao salvar", String(e?.message ?? e ?? "Falha desconhecida"));
+    } finally {
+      setBioSaving(false);
     }
   };
 
@@ -764,6 +817,96 @@ export default function CheckInScreen() {
             <Text style={{ fontSize: 12, color: colors.mutedForeground, lineHeight: 16 }}>
               {deviceId ? "Sem dados ainda. Importe o plano e marque treinos como concluídos." : "Abra o app novamente para gerar o deviceId."}
             </Text>
+          )}
+        </View>
+
+        <View style={s.card}>
+          <View style={s.cardTitleRow}>
+            <Text style={s.cardTitle}>BIOIMPEDÂNCIA (V5.2)</Text>
+            <Pressable onPress={refreshBio} disabled={bioLoading || !deviceId}>
+              {bioLoading ? (
+                <ActivityIndicator size="small" color={colors.mutedForeground} />
+              ) : (
+                <Feather name="refresh-cw" size={14} color={colors.mutedForeground} />
+              )}
+            </Pressable>
+          </View>
+          <View style={s.divider} />
+
+          {latestBio ? (
+            <>
+              <Text style={s.profileLabel}>ÚLTIMO REGISTRO</Text>
+              <Text style={{ fontSize: 10, color: colors.mutedForeground, letterSpacing: 1 }}>
+                {String(latestBio.entry_date ?? "")}
+              </Text>
+              <Text style={{ fontSize: 14, color: colors.foreground, fontWeight: "800" as const, marginTop: 6 }}>
+                {latestBio.weight_kg ? `${latestBio.weight_kg}kg` : "—"}{" "}
+                {latestBio.body_fat_pct ? `· ${latestBio.body_fat_pct}% gordura` : ""}
+              </Text>
+              <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 6, lineHeight: 16 }}>
+                {latestBio.muscle_mass_kg ? `💪 ${latestBio.muscle_mass_kg}kg músculo` : ""}{latestBio.muscle_mass_kg && latestBio.body_water_pct ? " · " : ""}
+                {latestBio.body_water_pct ? `💧 ${latestBio.body_water_pct}% água` : ""}{(latestBio.muscle_mass_kg || latestBio.body_water_pct) && latestBio.visceral_fat ? " · " : ""}
+                {latestBio.visceral_fat ? `🧠 ${latestBio.visceral_fat} visceral` : ""}
+              </Text>
+              {(latestBio.metabolic_age || latestBio.tmb_kcal) && (
+                <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 4, lineHeight: 16 }}>
+                  {latestBio.metabolic_age ? `⏳ Idade metab.: ${latestBio.metabolic_age}` : ""}{latestBio.metabolic_age && latestBio.tmb_kcal ? " · " : ""}
+                  {latestBio.tmb_kcal ? `🔥 TMB: ${latestBio.tmb_kcal} kcal` : ""}
+                </Text>
+              )}
+              <View style={{ height: 12 }} />
+            </>
+          ) : (
+            <Text style={{ fontSize: 12, color: colors.mutedForeground, lineHeight: 16 }}>
+              {deviceId ? "Sem registros ainda. Cole o JSON abaixo para salvar." : "Abra o app novamente para gerar o deviceId."}
+            </Text>
+          )}
+
+          <Text style={s.profileLabel}>COLAR JSON</Text>
+          <TextInput
+            style={[s.inputField, s.planTextArea, { fontSize: 12 }]}
+            value={bioJsonText}
+            onChangeText={setBioJsonText}
+            placeholderTextColor={colors.mutedForeground}
+            placeholder='Ex.: {"date":"2026-05-08","weight":75,"body_fat":24.3,"muscle_mass":54.1,"body_water":54.1,"visceral_fat":13.5,"metabolic_age":43,"tmb":1557,"protein":17.6,"bone_mass":3.09,"health_notes":""}'
+            multiline
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Pressable
+            style={({ pressed }) => [
+              s.importBtn,
+              { opacity: pressed ? 0.7 : 1, backgroundColor: bioSaving ? colors.border : colors.primary },
+            ]}
+            onPress={handleSaveBio}
+            disabled={bioSaving || !deviceId}
+          >
+            {bioSaving ? (
+              <ActivityIndicator size="small" color={colors.mutedForeground} />
+            ) : (
+              <Feather name="save" size={14} color="#000000" />
+            )}
+            <Text style={s.importBtnText}>SALVAR NO NEON</Text>
+          </Pressable>
+          {!!bioResult && (
+            <Text style={{ marginTop: 10, fontSize: 11, color: "#4CAF50", lineHeight: 16 }}>
+              {bioResult}
+            </Text>
+          )}
+
+          {bioEntries.length > 0 && (
+            <View style={{ marginTop: 12, gap: 8 }}>
+              {bioEntries.slice(0, 5).map((e: any) => (
+                <View key={String(e.entry_date)} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }}>
+                  <Text style={{ fontSize: 10, color: colors.mutedForeground, letterSpacing: 1 }}>
+                    {String(e.entry_date ?? "")}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: colors.foreground, fontWeight: "700" as const, marginTop: 4 }}>
+                    {e.weight_kg ? `${e.weight_kg}kg` : "—"} {e.body_fat_pct ? `· ${e.body_fat_pct}%` : ""}
+                  </Text>
+                </View>
+              ))}
+            </View>
           )}
         </View>
 

@@ -213,6 +213,19 @@ export const ProCoachAPI = {
     }>(`/procoach/athletes/${deviceId}/compliance${suffix}`);
   },
 
+  async upsertBioimpedance(deviceId: string, payload: unknown) {
+    return request<{ entry: Record<string, unknown> | null }>(`/procoach/athletes/${deviceId}/bioimpedance`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getBioimpedance(deviceId: string, limit = 30) {
+    return request<{ entries: Array<Record<string, unknown>> }>(
+      `/procoach/athletes/${deviceId}/bioimpedance?limit=${Math.max(1, Math.min(90, limit))}`
+    );
+  },
+
   // --- AUTENTICAÇÃO ---
   async sendOTP(phone: string) {
     return request<{ sent: boolean; phone: string }>("/auth/otp/send", {
