@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import React from "react";
 import {
   ActivityIndicator,
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -60,6 +61,100 @@ function getCalendarDayOffset(finishedAt: string): number {
   );
 }
 
+function getSaoPauloDayKey(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
+function promptGelUsage(opts: {
+  title: string;
+  onSelect: (gelsUsed: number) => void;
+}) {
+  const askLast = (from: number) => {
+    Alert.alert(opts.title, "Quantos géis você usou?", [
+      { text: String(from), onPress: () => opts.onSelect(from) },
+      { text: String(from + 1), onPress: () => opts.onSelect(from + 1) },
+      { text: String(from + 2), onPress: () => opts.onSelect(from + 2) },
+    ]);
+  };
+  const ask4Plus = () => {
+    Alert.alert(opts.title, "Quantos géis você usou?", [
+      { text: "4", onPress: () => opts.onSelect(4) },
+      { text: "5", onPress: () => opts.onSelect(5) },
+      { text: "6+", onPress: () => askLast(6) },
+    ]);
+  };
+  const ask2Plus = () => {
+    Alert.alert(opts.title, "Quantos géis você usou?", [
+      { text: "2", onPress: () => opts.onSelect(2) },
+      { text: "3", onPress: () => opts.onSelect(3) },
+      { text: "4+", onPress: () => ask4Plus() },
+    ]);
+  };
+  Alert.alert(opts.title, "Quantos géis você usou?", [
+    { text: "0", onPress: () => opts.onSelect(0) },
+    { text: "1", onPress: () => opts.onSelect(1) },
+    { text: "2+", onPress: () => ask2Plus() },
+  ]);
+}
+
+function promptRPE(opts: { onSelect: (rpe: number) => void }) {
+  const ask910 = () => {
+    Alert.alert("Debrief", "RPE (esforço percebido)?", [
+      { text: "9", onPress: () => opts.onSelect(9) },
+      { text: "10", onPress: () => opts.onSelect(10) },
+      { text: "Voltar", onPress: () => askStrong() },
+    ]);
+  };
+  const askStrong = () => {
+    Alert.alert("Debrief", "RPE (esforço percebido)?", [
+      { text: "7", onPress: () => opts.onSelect(7) },
+      { text: "8", onPress: () => opts.onSelect(8) },
+      { text: "9-10", onPress: () => ask910() },
+    ]);
+  };
+  const askMid = () => {
+    Alert.alert("Debrief", "RPE (esforço percebido)?", [
+      { text: "4", onPress: () => opts.onSelect(4) },
+      { text: "5", onPress: () => opts.onSelect(5) },
+      { text: "6", onPress: () => opts.onSelect(6) },
+    ]);
+  };
+  const askEasy = () => {
+    Alert.alert("Debrief", "RPE (esforço percebido)?", [
+      { text: "1", onPress: () => opts.onSelect(1) },
+      { text: "2", onPress: () => opts.onSelect(2) },
+      { text: "3", onPress: () => opts.onSelect(3) },
+    ]);
+  };
+  Alert.alert("Debrief", "RPE (esforço percebido)?", [
+    { text: "Leve (1-3)", onPress: () => askEasy() },
+    { text: "Médio (4-6)", onPress: () => askMid() },
+    { text: "Forte (7-10)", onPress: () => askStrong() },
+  ]);
+}
+
+function promptPain(opts: { onSelect: (pain: number) => void }) {
+  const ask45 = () => {
+    Alert.alert("Debrief", "Dor articular (0–5)?", [
+      { text: "4", onPress: () => opts.onSelect(4) },
+      { text: "5", onPress: () => opts.onSelect(5) },
+      { text: "Voltar", onPress: () => ask23() },
+    ]);
+  };
+  const ask23 = () => {
+    Alert.alert("Debrief", "Dor articular (0–5)?", [
+      { text: "2", onPress: () => opts.onSelect(2) },
+      { text: "3", onPress: () => opts.onSelect(3) },
+      { text: "4-5", onPress: () => ask45() },
+    ]);
+  };
+  Alert.alert("Debrief", "Dor articular (0–5)?", [
+    { text: "0", onPress: () => opts.onSelect(0) },
+    { text: "1", onPress: () => opts.onSelect(1) },
+    { text: "2+", onPress: () => ask23() },
+  ]);
+}
+
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -68,6 +163,26 @@ export default function DashboardScreen() {
     recoveryBlock, setRecoveryBlock, clearRecoveryBlock,
   } = useAthlete();
   const { todayWorkout, currentWeek, hrv, painLevel, profile, aiLoading } = state;
+
+  const [dayWeather, setDayWeather] = React.useState<{
+    emoji: string;
+    minC: number;
+    maxC: number;
+    windKmH: number;
+    rainPct: number;
+  } | null>(null);
+  const [dayWeatherLoading, setDayWeatherLoading] = React.useState(false);
+  const [planToday, setPlanToday] = React.useState<null | {
+    session_date: string;
+    day_name: string | null;
+    activity: string;
+    pace_target: string | null;
+    treadmill_speed: string | null;
+    rest_interval: string | null;
+    structure: string | null;
+    planned_km?: number;
+  }>(null);
+  const [planTodayLoading, setPlanTodayLoading] = React.useState(false);
 
   // Race happening today (day of race — race mode)
   const todayRace = React.useMemo(() => {
@@ -89,6 +204,34 @@ export default function DashboardScreen() {
   const isInRecovery = recoveryBlock !== null && recoveryDayOffset >= 1 && recoveryDayOffset <= recoveryBlock.totalDays;
   const isRecoveryExpired = recoveryBlock !== null && recoveryDayOffset > recoveryBlock.totalDays;
   const recoveryWorkoutCompleted = recoveryBlock?.completedDayOffsets?.includes(recoveryDayOffset) ?? false;
+
+  const requestDebrief = React.useCallback((context: string) => {
+    if (!deviceId) return;
+    Alert.alert("Debrief", "Quer registrar RPE e dor agora?", [
+      { text: "Depois", style: "cancel" },
+      {
+        text: "Agora",
+        onPress: () => {
+          promptRPE({
+            onSelect: (rpe) => {
+              promptPain({
+                onSelect: async (pain) => {
+                  try {
+                    await ProCoachAPI.logWorkoutFeedback(deviceId, {
+                      date: getSaoPauloDayKey(),
+                      rpe,
+                      painLevel: pain,
+                      notes: context,
+                    });
+                  } catch {}
+                },
+              });
+            },
+          });
+        },
+      },
+    ]);
+  }, [deviceId]);
 
   const handleRaceFinished = React.useCallback(async (finishDurationSec: number, race: Race) => {
     if (!deviceId) return;
@@ -112,7 +255,21 @@ export default function DashboardScreen() {
       };
       await setRecoveryBlock(block);
     } catch {}
-  }, [deviceId, currentWeek, setRecoveryBlock]);
+
+    promptGelUsage({
+      title: "Prova concluída",
+      onSelect: async (gelsUsed) => {
+        try {
+          await ProCoachAPI.logGelUsage(deviceId, {
+            date: getSaoPauloDayKey(),
+            context: `race:${race.id}`,
+            gelsUsed,
+          });
+        } catch {}
+        requestDebrief(`race:${race.id}`);
+      },
+    });
+  }, [deviceId, currentWeek, setRecoveryBlock, requestDebrief]);
 
   const handleRecoveryComplete = React.useCallback(async () => {
     if (!recoveryBlock) return;
@@ -136,10 +293,94 @@ export default function DashboardScreen() {
   const monthNames = ["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"];
   const todayLabel = `${dayNames[now.getDay()]} ${now.getDate()} ${monthNames[now.getMonth()]}`;
 
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setDayWeatherLoading(true);
+      try {
+        const lat = -23.6087;
+        const lon = -46.6676;
+        const url =
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+          `&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,weathercode` +
+          `&timezone=America%2FSao_Paulo&forecast_days=1`;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          daily?: {
+            temperature_2m_max: number[];
+            temperature_2m_min: number[];
+            precipitation_probability_max: number[];
+            windspeed_10m_max: number[];
+            weathercode: number[];
+          };
+        };
+        const d = data.daily;
+        if (!d) return;
+        const code = d.weathercode?.[0] ?? 0;
+        const emoji = code === 0 ? "☀️" : code <= 3 ? "⛅" : code <= 67 ? "🌧️" : "⛈️";
+        const payload = {
+          emoji,
+          minC: Math.round(d.temperature_2m_min?.[0] ?? 0),
+          maxC: Math.round(d.temperature_2m_max?.[0] ?? 0),
+          windKmH: Math.round(d.windspeed_10m_max?.[0] ?? 0),
+          rainPct: Math.round(d.precipitation_probability_max?.[0] ?? 0),
+        };
+        if (!cancelled) setDayWeather(payload);
+      } catch {
+      } finally {
+        if (!cancelled) setDayWeatherLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!deviceId) return;
+    (async () => {
+      setPlanTodayLoading(true);
+      try {
+        const r = await ProCoachAPI.getPlanToday(deviceId);
+        if (!cancelled) setPlanToday(r.session ?? null);
+      } catch {
+      } finally {
+        if (!cancelled) setPlanTodayLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [deviceId]);
+
   const handleComplete = async () => {
     if (todayWorkout.completed) return;
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await markWorkoutComplete();
+
+    const estimatedMin =
+      todayWorkout.durationMin > 0
+        ? todayWorkout.durationMin
+        : calcEstimatedTimeMin(todayWorkout.distanceKm, 6.75);
+    const isLongao =
+      todayWorkout.type === "corrida" && (todayWorkout.distanceKm >= 12 || estimatedMin >= 70);
+    if (!deviceId) return;
+
+    if (isLongao) {
+      promptGelUsage({
+        title: "Longão concluído",
+        onSelect: async (gelsUsed) => {
+          try {
+            await ProCoachAPI.logGelUsage(deviceId, {
+              date: getSaoPauloDayKey(),
+              context: "longao",
+              gelsUsed,
+            });
+          } catch {}
+          requestDebrief("longao");
+        },
+      });
+    } else {
+      requestDebrief("workout");
+    }
   };
 
   const s = StyleSheet.create({
@@ -420,12 +661,30 @@ export default function DashboardScreen() {
       height: 40,
       backgroundColor: colors.border,
     },
+    dayWeatherCard: {
+      backgroundColor: colors.card,
+      borderRadius: colors.radius,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 14,
+      marginBottom: 16,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
   });
 
   const workoutIcon = WORKOUT_ICONS[todayWorkout.type] ?? "activity";
   const workoutLabel = WORKOUT_LABELS[todayWorkout.type] ?? "TREINO";
   const distKm = formatDistance(todayWorkout.distanceKm);
   const showDistance = todayWorkout.type !== "forca" && todayWorkout.type !== "folga" && distKm > 0;
+  const estimatedMinForGels =
+    todayWorkout.durationMin > 0
+      ? todayWorkout.durationMin
+      : calcEstimatedTimeMin(todayWorkout.distanceKm, 6.75);
+  const isLongaoForGels =
+    todayWorkout.type === "corrida" && (todayWorkout.distanceKm >= 12 || estimatedMinForGels >= 70);
+  const recommendedGels = isLongaoForGels ? calcGelCount(estimatedMinForGels) : 0;
 
   const hrvColor = hrv >= 65 ? "#4CAF50" : hrv >= 50 ? "#FF9800" : "#EF4444";
   const painColor = painLevel === 0 ? "#4CAF50" : painLevel <= 2 ? "#FF9800" : "#EF4444";
@@ -480,6 +739,61 @@ export default function DashboardScreen() {
             </View>
           </View>
         </View>
+
+        <View style={s.dayWeatherCard}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Text style={{ fontSize: 24 }}>{dayWeather?.emoji ?? "🌤️"}</Text>
+            <View>
+              <Text style={{ fontSize: 9, letterSpacing: 3, fontWeight: "800" as const, color: colors.mutedForeground }}>
+                PREVISÃO DE HOJE
+              </Text>
+              {dayWeather ? (
+                <Text style={{ fontSize: 12, color: colors.foreground, marginTop: 4 }}>
+                  {dayWeather.minC}°–{dayWeather.maxC}° · 💧 {dayWeather.rainPct}% · 💨 {dayWeather.windKmH}km/h
+                </Text>
+              ) : (
+                <Text style={{ fontSize: 12, color: colors.mutedForeground, marginTop: 4 }}>
+                  {dayWeatherLoading ? "Buscando previsão..." : "Previsão indisponível"}
+                </Text>
+              )}
+            </View>
+          </View>
+          {dayWeatherLoading && <ActivityIndicator size="small" color={colors.mutedForeground} />}
+        </View>
+
+        {(planTodayLoading || planToday) && (
+          <View style={s.dayWeatherCard}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+              <Text style={{ fontSize: 22 }}>📋</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 9, letterSpacing: 3, fontWeight: "800" as const, color: colors.mutedForeground }}>
+                  PLANO DE HOJE
+                </Text>
+                {planToday ? (
+                  <>
+                    <Text style={{ fontSize: 12, color: colors.foreground, marginTop: 4, fontWeight: "800" as const }}>
+                      {planToday.activity}{planToday.planned_km ? ` · ${planToday.planned_km}km` : ""}
+                    </Text>
+                    {(planToday.pace_target || planToday.rest_interval || planToday.structure) && (
+                      <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 4, lineHeight: 16 }}>
+                        {planToday.pace_target ? `Pace: ${planToday.pace_target}` : ""}
+                        {planToday.pace_target && planToday.rest_interval ? " · " : ""}
+                        {planToday.rest_interval ? `Rep: ${planToday.rest_interval}` : ""}
+                        {(planToday.pace_target || planToday.rest_interval) && planToday.structure ? " · " : ""}
+                        {planToday.structure ?? ""}
+                      </Text>
+                    )}
+                  </>
+                ) : (
+                  <Text style={{ fontSize: 12, color: colors.mutedForeground, marginTop: 4 }}>
+                    {planTodayLoading ? "Buscando plano..." : "Nenhum treino importado para hoje"}
+                  </Text>
+                )}
+              </View>
+            </View>
+            {planTodayLoading && <ActivityIndicator size="small" color={colors.mutedForeground} />}
+          </View>
+        )}
 
         {/* ── PRE-RACE BANNERS (≤2 days) ──────────── */}
         {upcomingRaces.map((race) => {
@@ -629,6 +943,17 @@ export default function DashboardScreen() {
                       <Text style={s.workoutMetaText}>{distKm} KM INTEIROS</Text>
                     </View>
                   )}
+                </View>
+              )}
+
+              {isLongaoForGels && recommendedGels > 0 && (
+                <View style={{ backgroundColor: colors.secondary, borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                  <Text style={{ fontSize: 10, color: colors.mutedForeground, letterSpacing: 0.5, lineHeight: 15 }}>
+                    🍬 Recomendação de géis: 1º após 1h, depois a cada 30min · Total sugerido:{" "}
+                    <Text style={{ fontWeight: "700" as const, color: colors.foreground }}>
+                      {recommendedGels}
+                    </Text>
+                  </Text>
                 </View>
               )}
             </>

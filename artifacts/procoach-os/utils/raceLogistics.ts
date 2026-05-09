@@ -79,19 +79,19 @@ export function calcEstimatedTimeMin(distanceKm: number, paceMinKm: number): num
 }
 
 export function calcGelCount(estimatedTimeMin: number): number {
-  if (estimatedTimeMin < 45) return 0;
-  return Math.floor(estimatedTimeMin / 45);
+  if (estimatedTimeMin < 60) return 0;
+  return Math.floor((estimatedTimeMin - 60) / 30) + 1;
 }
 
 export function getGelSchedule(estimatedTimeMin: number): string[] {
   const count = calcGelCount(estimatedTimeMin);
   const schedule: string[] = [];
   for (let i = 1; i <= count; i++) {
-    const min = i * 45;
+    const min = 60 + (i - 1) * 30;
     const h = Math.floor(min / 60);
     const m = min % 60;
     const label = h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m}min`;
-    schedule.push(`Gel ${i} às ${label} de prova`);
+    schedule.push(`Gel ${i} às ${label}`);
   }
   return schedule;
 }

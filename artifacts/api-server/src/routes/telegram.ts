@@ -767,4 +767,60 @@ router.post("/telegram/setup-webhook", async (req: Request, res: Response) => {
   res.json({ webhookUrl, result });
 });
 
+router.post("/telegram/daily", async (req: Request, res: Response) => {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  const secret = process.env.TELEGRAM_CRON_SECRET;
+  const provided = String(req.headers["x-cron-secret"] ?? "");
+  if (!token || !chatId) { res.status(500).json({ error: "TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID not set" }); return; }
+  if (!secret) { res.status(500).json({ error: "TELEGRAM_CRON_SECRET not set" }); return; }
+  if (provided !== secret) { res.status(401).json({ error: "unauthorized" }); return; }
+
+  res.json({ ok: true });
+  try {
+    const athlete = await getPrimaryAthlete();
+    if (!athlete) {
+      await sendTelegram(chatId, "⚠️ Nenhum atleta no sistema. Abre o app ProCoach primeiro.");
+      return;
+    }
+
+    const [weather, weekStats] = await Promise.all([
+      getWeather(),
+      db
+        .select()
+        .from(weeklyStatsTable)
+        .where(sql`${weeklyStatsTable.athleteId} = ${athlete.id} AND ${weeklyStatsTable.week} = ${athlete.currentWeek}`)
+        .limit(1),
+    ]);
+
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+    const workouts = await db
+      .select()
+      .from(workoutEntriesTable)
+      .where(sql`${workoutEntriesTable.athleteId} = ${athlete.id} AND ${workoutEntriesTable.entryDate} = ${today}`)
+      .limit(5);
+
+    const phase = getPhase(athlete.currentWeek);
+    const targetKm = phase.kmTarget;
+    const doneKm = weekStats[0]?.completedKm ?? 0;
+    const progressBar = buildProgressBar(doneKm, targetKm);
+
+    const wLine =
+      workouts.length > 0
+        ? workouts.map((w) => `🔹 *${w.type.toUpperCase()}* — *${roundKm(w.distanceKm)}km*`).join("\n")
+        : `🔹 *${roundKm(targetKm / 5)}km* — *${phase.paceTarget}* (sugestão)`;
+
+    await sendTelegram(
+      chatId,
+      `☀️ *PROCOACH OS — BRIEFING DO DIA*\n\n` +
+        `${weather}\n\n` +
+        `📆 Hoje: *${today}* · Semana *${athlete.currentWeek}*/16 · Fase *${phase.name}*\n\n` +
+        `🎯 *Missão do dia:*\n${wLine}\n\n` +
+        `📊 *Progresso da semana:* ${progressBar} *${doneKm}/${targetKm}km*`
+    );
+  } catch (err) {
+    console.error("[Telegram daily error]", err);
+  }
+});
+
 export default router;

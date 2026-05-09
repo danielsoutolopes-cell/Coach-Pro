@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import React, { useState, useEffect, useCallback } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -16,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAthlete } from "@/context/AthleteContext";
 import { useColors } from "@/hooks/useColors";
+import { ProCoachAPI } from "@/services/api";
 import { getRecoverySuggestion, shouldSuggestRecovery } from "@/utils/training";
 import {
   WeeklyReportPrefs,
@@ -58,10 +60,23 @@ function getHRVStatus(hrv: number): { label: string; color: string; detail: stri
 
 const HOUR_OPTIONS = Array.from({ length: 16 }, (_, i) => i + 6); // 06h–21h
 
+function getSaoPauloDayKey(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
+function getSaoPauloWeekStartKey(): string {
+  const nowSp = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+  const day = nowSp.getDay();
+  const daysSinceMonday = (day + 6) % 7;
+  const start = new Date(nowSp);
+  start.setDate(nowSp.getDate() - daysSinceMonday);
+  return start.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
 export default function CheckInScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { state, submitDailyCheckIn, updateProfile } = useAthlete();
+  const { state, submitDailyCheckIn, updateProfile, deviceId } = useAthlete();
   const { hrv, painLevel, profile, lastCheckInDate, aiLoading, currentWeek } = state;
 
   const todayStr = new Date().toDateString();
@@ -74,6 +89,32 @@ export default function CheckInScreen() {
   const [done, setDone] = useState(alreadyCheckedIn);
   const [nameInput, setNameInput] = useState(profile.name);
 
+  const [gelStock, setGelStock] = useState<number>(0);
+  const [gelStockText, setGelStockText] = useState<string>("0");
+  const [gelLoading, setGelLoading] = useState(false);
+  const [gelSaving, setGelSaving] = useState(false);
+
+  const [planJsonText, setPlanJsonText] = useState<string>("");
+  const [planImporting, setPlanImporting] = useState(false);
+  const [planImportResult, setPlanImportResult] = useState<string>("");
+  const [planChecking, setPlanChecking] = useState(false);
+  const [planSessions, setPlanSessions] = useState<Array<{
+    date: string;
+    activity: string;
+    paceTarget: string | null;
+    structure: string | null;
+  }>>([]);
+
+  const [complianceLoading, setComplianceLoading] = useState(false);
+  const [compliance, setCompliance] = useState<null | {
+    from: string;
+    to: string;
+    plannedSessions: number;
+    plannedKm: number;
+    completedSessions: number;
+    completedKm: number;
+  }>(null);
+
   // ── Notification state ─────────────────────────────────────────────────────
   const supported = notificationsSupported();
   const [weeklyPrefs, setWeeklyPrefs] = useState<WeeklyReportPrefs>({ enabled: false, hour: 9, minute: 0 });
@@ -84,6 +125,38 @@ export default function CheckInScreen() {
   useEffect(() => {
     loadWeeklyReportPrefs().then(setWeeklyPrefs);
   }, []);
+
+  useEffect(() => {
+    if (!deviceId) return;
+    setGelLoading(true);
+    ProCoachAPI.getGelStock(deviceId)
+      .then((r) => {
+        const v = Math.max(0, Math.round(r.gelsInStock ?? 0));
+        setGelStock(v);
+        setGelStockText(String(v));
+      })
+      .catch(() => {})
+      .finally(() => setGelLoading(false));
+  }, [deviceId]);
+
+  const refreshCompliance = useCallback(async () => {
+    if (!deviceId) return;
+    setComplianceLoading(true);
+    try {
+      const from = getSaoPauloWeekStartKey();
+      const to = getSaoPauloDayKey();
+      const r = await ProCoachAPI.getCompliance(deviceId, { from, to });
+      setCompliance(r);
+    } catch {
+      setCompliance(null);
+    } finally {
+      setComplianceLoading(false);
+    }
+  }, [deviceId]);
+
+  useEffect(() => {
+    refreshCompliance();
+  }, [refreshCompliance]);
 
   const hrvStatus = getHRVStatus(localHRV);
   const needsRecovery = shouldSuggestRecovery(localPain, localHRV);
@@ -127,6 +200,92 @@ export default function CheckInScreen() {
     if (!nameInput.trim()) return;
     await updateProfile({ name: nameInput.trim() });
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const handleGelTextChange = (text: string) => {
+    const digits = text.replace(/[^\d]/g, "");
+    setGelStockText(digits);
+    const v = Math.max(0, Math.round(Number(digits || "0")));
+    setGelStock(v);
+  };
+
+  const adjustGelStock = (delta: number) => {
+    const next = Math.max(0, gelStock + delta);
+    setGelStock(next);
+    setGelStockText(String(next));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleSaveGelStock = async () => {
+    if (!deviceId) return;
+    setGelSaving(true);
+    try {
+      const r = await ProCoachAPI.setGelStock(deviceId, gelStock);
+      const v = Math.max(0, Math.round(r.gelsInStock ?? 0));
+      setGelStock(v);
+      setGelStockText(String(v));
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+    } finally {
+      setGelSaving(false);
+    }
+  };
+
+  const handleImportPlan = async () => {
+    if (!deviceId) {
+      Alert.alert("Erro", "deviceId não encontrado. Feche e abra o app novamente.");
+      return;
+    }
+    const raw = planJsonText.trim();
+    if (!raw) {
+      Alert.alert("Faltou o JSON", "Cole o JSON do plano aqui antes de importar.");
+      return;
+    }
+    setPlanImporting(true);
+    setPlanImportResult("");
+    try {
+      const parsed = JSON.parse(raw) as any;
+      const maybePlan = parsed?.plano_treinamento ?? parsed?.planoTreinamento ?? parsed;
+      const cronograma = maybePlan?.cronograma;
+      if (!Array.isArray(cronograma) || cronograma.length === 0) {
+        Alert.alert("JSON inválido", "Não encontrei 'cronograma' no JSON. Cole o JSON completo do plano.");
+        return;
+      }
+      const result = await ProCoachAPI.importPlanJson(deviceId, parsed);
+      setPlanImportResult(`Importado: ${result.imported} treinos (${result.firstDate} → ${result.lastDate})`);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      Alert.alert("Erro ao importar", String(e?.message ?? e ?? "Falha desconhecida"));
+    } finally {
+      setPlanImporting(false);
+    }
+  };
+
+  const handleCheckPlan = async () => {
+    if (!deviceId) {
+      Alert.alert("Erro", "deviceId não encontrado. Feche e abra o app novamente.");
+      return;
+    }
+    setPlanChecking(true);
+    try {
+      const from = getSaoPauloDayKey();
+      const to = state.profile.targetRaceDate?.slice(0, 10) || undefined;
+      const res = await ProCoachAPI.getPlan(deviceId, { from, to });
+      const normalized = (res.sessions ?? []).map((s) => ({
+        date: s.session_date,
+        activity: s.activity,
+        paceTarget: s.pace_target,
+        structure: s.structure,
+      }));
+      setPlanSessions(normalized.slice(0, 12));
+      if (normalized.length === 0) {
+        Alert.alert("Plano vazio", "Ainda não encontrei treinos importados. Faça a importação e tente novamente.");
+      }
+    } catch (e: any) {
+      Alert.alert("Erro ao consultar", String(e?.message ?? e ?? "Falha desconhecida"));
+    } finally {
+      setPlanChecking(false);
+    }
   };
 
   // ── Weekly report notification handlers ────────────────────────────────────
@@ -260,6 +419,37 @@ export default function CheckInScreen() {
       backgroundColor: "#0A2A1A", borderRadius: 8, padding: 10, marginBottom: 12,
     },
     activeIndicatorText: { fontSize: 11, color: "#4CAF50", flex: 1, lineHeight: 15 },
+    gelRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+    gelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, alignItems: "center" },
+    gelBtnText: { fontSize: 11, fontWeight: "800" as const, letterSpacing: 2 },
+    planTextArea: {
+      minHeight: 160,
+      textAlignVertical: "top" as any,
+    },
+    importBtn: {
+      marginTop: 10,
+      backgroundColor: colors.primary,
+      borderRadius: 10,
+      paddingVertical: 12,
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "center",
+      gap: 8,
+    },
+    importBtnText: { fontSize: 11, fontWeight: "800" as const, letterSpacing: 2, color: "#000000" },
+    checkBtn: {
+      marginTop: 8,
+      backgroundColor: "transparent",
+      borderRadius: 10,
+      paddingVertical: 12,
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "center",
+      gap: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    checkBtnText: { fontSize: 11, fontWeight: "800" as const, letterSpacing: 2, color: colors.mutedForeground },
   });
 
   return (
@@ -535,6 +725,192 @@ export default function CheckInScreen() {
               <Text style={s.saveBtnText}>OK</Text>
             </Pressable>
           </View>
+        </View>
+
+        <View style={s.card}>
+          <View style={s.cardTitleRow}>
+            <Text style={s.cardTitle}>COMPLIANCE DA SEMANA</Text>
+            <Pressable onPress={refreshCompliance} disabled={complianceLoading || !deviceId}>
+              {complianceLoading ? (
+                <ActivityIndicator size="small" color={colors.mutedForeground} />
+              ) : (
+                <Feather name="refresh-cw" size={14} color={colors.mutedForeground} />
+              )}
+            </Pressable>
+          </View>
+          <View style={s.divider} />
+          {compliance ? (
+            <>
+              <Text style={s.profileLabel}>SESSÕES</Text>
+              <Text style={{ fontSize: 14, color: colors.foreground, fontWeight: "800" as const }}>
+                {compliance.completedSessions}/{compliance.plannedSessions}
+                {compliance.plannedSessions > 0
+                  ? ` (${Math.round((compliance.completedSessions / compliance.plannedSessions) * 100)}%)`
+                  : ""}
+              </Text>
+              <View style={{ height: 10 }} />
+              <Text style={s.profileLabel}>QUILOMETRAGEM</Text>
+              <Text style={{ fontSize: 14, color: colors.foreground, fontWeight: "800" as const }}>
+                {compliance.completedKm}km/{compliance.plannedKm}km
+                {compliance.plannedKm > 0
+                  ? ` (${Math.round((compliance.completedKm / compliance.plannedKm) * 100)}%)`
+                  : ""}
+              </Text>
+              <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 10, lineHeight: 15 }}>
+                {compliance.from} → {compliance.to}
+              </Text>
+            </>
+          ) : (
+            <Text style={{ fontSize: 12, color: colors.mutedForeground, lineHeight: 16 }}>
+              {deviceId ? "Sem dados ainda. Importe o plano e marque treinos como concluídos." : "Abra o app novamente para gerar o deviceId."}
+            </Text>
+          )}
+        </View>
+
+        <View style={s.card}>
+          <View style={s.cardTitleRow}>
+            <Text style={s.cardTitle}>ESTOQUE DE GÉIS</Text>
+            {gelLoading && <ActivityIndicator size="small" color={colors.mutedForeground} />}
+          </View>
+          <View style={s.divider} />
+          <Text style={s.profileLabel}>QUANTIDADE ATUAL</Text>
+          <View style={s.inputRow}>
+            <TextInput
+              style={[s.inputField, { fontSize: 14 }]}
+              value={gelStockText}
+              onChangeText={handleGelTextChange}
+              placeholderTextColor={colors.mutedForeground}
+              placeholder="0"
+              keyboardType="number-pad"
+            />
+            <Pressable
+              style={({ pressed }) => [
+                s.saveBtn,
+                { opacity: pressed ? 0.7 : 1, backgroundColor: gelSaving ? colors.border : colors.primary },
+              ]}
+              onPress={handleSaveGelStock}
+              disabled={gelSaving || !deviceId}
+            >
+              {gelSaving ? (
+                <ActivityIndicator size="small" color={colors.mutedForeground} />
+              ) : (
+                <Text style={s.saveBtnText}>SALVAR</Text>
+              )}
+            </Pressable>
+          </View>
+          <View style={{ height: 10 }} />
+          <View style={s.gelRow}>
+            <Pressable
+              style={({ pressed }) => [
+                s.gelBtn,
+                { opacity: pressed ? 0.7 : 1, borderColor: colors.border, backgroundColor: colors.secondary },
+              ]}
+              onPress={() => adjustGelStock(-1)}
+              disabled={!deviceId}
+            >
+              <Text style={[s.gelBtnText, { color: colors.mutedForeground }]}>-1</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                s.gelBtn,
+                { opacity: pressed ? 0.7 : 1, borderColor: colors.border, backgroundColor: colors.secondary },
+              ]}
+              onPress={() => adjustGelStock(+1)}
+              disabled={!deviceId}
+            >
+              <Text style={[s.gelBtnText, { color: colors.mutedForeground }]}>+1</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                s.gelBtn,
+                { opacity: pressed ? 0.7 : 1, borderColor: colors.border, backgroundColor: colors.secondary },
+              ]}
+              onPress={() => adjustGelStock(+5)}
+              disabled={!deviceId}
+            >
+              <Text style={[s.gelBtnText, { color: colors.mutedForeground }]}>+5</Text>
+            </Pressable>
+          </View>
+          {!deviceId && (
+            <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 10, lineHeight: 15 }}>
+              Abra o app novamente para gerar o deviceId e sincronizar com o servidor.
+            </Text>
+          )}
+        </View>
+
+        <View style={s.card}>
+          <View style={s.cardTitleRow}>
+            <Text style={s.cardTitle}>IMPORTAR PLANO (JSON)</Text>
+            {planImporting && <ActivityIndicator size="small" color={colors.mutedForeground} />}
+          </View>
+          <View style={s.divider} />
+          <Text style={s.profileLabel}>COLE O JSON DO SEU PLANO</Text>
+          <TextInput
+            style={[s.inputField, s.planTextArea, { fontSize: 12 }]}
+            value={planJsonText}
+            onChangeText={setPlanJsonText}
+            placeholderTextColor={colors.mutedForeground}
+            placeholder='Cole aqui o JSON (começa com {"plano_treinamento": ...})'
+            multiline
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Pressable
+            style={({ pressed }) => [
+              s.importBtn,
+              { opacity: pressed ? 0.7 : 1, backgroundColor: planImporting ? colors.border : colors.primary },
+            ]}
+            onPress={handleImportPlan}
+            disabled={planImporting || !deviceId}
+          >
+            {planImporting ? (
+              <ActivityIndicator size="small" color={colors.mutedForeground} />
+            ) : (
+              <Feather name="upload" size={14} color="#000000" />
+            )}
+            <Text style={s.importBtnText}>IMPORTAR PARA O NEON</Text>
+          </Pressable>
+          {!!planImportResult && (
+            <Text style={{ marginTop: 10, fontSize: 11, color: "#4CAF50", lineHeight: 16 }}>
+              {planImportResult}
+            </Text>
+          )}
+          <Pressable
+            style={({ pressed }) => [s.checkBtn, { opacity: pressed ? 0.7 : 1 }]}
+            onPress={handleCheckPlan}
+            disabled={planChecking || !deviceId}
+          >
+            {planChecking ? (
+              <ActivityIndicator size="small" color={colors.mutedForeground} />
+            ) : (
+              <Feather name="list" size={14} color={colors.mutedForeground} />
+            )}
+            <Text style={s.checkBtnText}>VERIFICAR PLANO IMPORTADO</Text>
+          </Pressable>
+          {planSessions.length > 0 && (
+            <View style={{ marginTop: 12, gap: 8 }}>
+              {planSessions.map((sesh) => (
+                <View key={sesh.date} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }}>
+                  <Text style={{ fontSize: 10, color: colors.mutedForeground, letterSpacing: 1 }}>
+                    {sesh.date}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: colors.foreground, fontWeight: "700" as const, marginTop: 4 }}>
+                    {sesh.activity}
+                  </Text>
+                  {(sesh.paceTarget || sesh.structure) && (
+                    <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 4, lineHeight: 16 }}>
+                      {sesh.paceTarget ? `Pace: ${sesh.paceTarget}` : ""}{sesh.paceTarget && sesh.structure ? " · " : ""}{sesh.structure ?? ""}
+                    </Text>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+          {!deviceId && (
+            <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 10, lineHeight: 15 }}>
+              Abra o app novamente para gerar o deviceId e sincronizar com o servidor.
+            </Text>
+          )}
         </View>
 
       </ScrollView>

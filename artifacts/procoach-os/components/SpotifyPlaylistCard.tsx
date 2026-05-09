@@ -55,8 +55,44 @@ export function SpotifyPlaylistCard({ workoutType }: Props) {
     }
   };
 
-  // Silent no-op on error — don't pollute the UI
-  if (error) return null;
+  if (error) {
+    return (
+      <View style={{
+        backgroundColor: colors.card,
+        borderRadius: colors.radius,
+        borderWidth: 1,
+        borderColor: SPOTIFY_GREEN + "33",
+        overflow: "hidden",
+        marginTop: 12,
+        padding: 14,
+      }}>
+        <Text style={{ fontSize: 9, fontWeight: "800" as const, color: SPOTIFY_GREEN, letterSpacing: 2 }}>
+          ♫ SPOTIFY
+        </Text>
+        <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 6, lineHeight: 16 }}>
+          Não consegui carregar a playlist agora. Verifique a conexão com o servidor e tente novamente.
+        </Text>
+        <Pressable
+          onPress={fetchPlaylist}
+          style={({ pressed }) => ({
+            marginTop: 10,
+            alignSelf: "flex-start",
+            backgroundColor: pressed ? SPOTIFY_GREEN + "44" : SPOTIFY_GREEN + "22",
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: SPOTIFY_GREEN + "66",
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            opacity: pressed ? 0.8 : 1,
+          })}
+        >
+          <Text style={{ fontSize: 10, fontWeight: "800" as const, color: SPOTIFY_GREEN, letterSpacing: 1 }}>
+            TENTAR NOVAMENTE
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={{

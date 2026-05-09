@@ -9,7 +9,7 @@ import Constants from "expo-constants";
 
 // Prioriza a URL fornecida via variável de ambiente (ex: .env)
 // No Expo, use EXPO_PUBLIC_API_URL para o ambiente de produção
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://coach-pro-v8e4.onrender.com";
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://procoach-os-api.onrender.com";
 
 if (!process.env.EXPO_PUBLIC_API_URL) {
   console.warn("[ALERTA TÁTICO] EXPO_PUBLIC_API_URL não definida. As requisições podem falhar ou usar o endereço incorreto.");
@@ -118,6 +118,13 @@ export const ProCoachAPI = {
     );
   },
 
+  async logWorkoutFeedback(deviceId: string, payload: { date: string; rpe?: number; painLevel?: number; notes?: string }) {
+    return request<{ ok: boolean; entryDate: string }>(`/procoach/athletes/${deviceId}/workout-feedback`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
   async getWorkouts(deviceId: string, limit = 30) {
     return request<{ entries: unknown[] }>(
       `/procoach/athletes/${deviceId}/workouts?limit=${limit}`
@@ -128,6 +135,82 @@ export const ProCoachAPI = {
     return request<{ weeklyCompleted: Record<number, number> }>(
       `/procoach/athletes/${deviceId}/weekly-stats`
     );
+  },
+
+  // --- ESTOQUE DE GÉIS ---
+  async getGelStock(deviceId: string) {
+    return request<{ gelsInStock: number }>(`/procoach/athletes/${deviceId}/gel-stock`);
+  },
+
+  async setGelStock(deviceId: string, gelsInStock: number) {
+    return request<{ gelsInStock: number }>(`/procoach/athletes/${deviceId}/gel-stock`, {
+      method: "PUT",
+      body: JSON.stringify({ gelsInStock }),
+    });
+  },
+
+  async logGelUsage(deviceId: string, payload: { date: string; context: string; gelsUsed: number }) {
+    return request<{ gelsInStock: number; gelsUsed: number; entryDate: string; context: string }>(
+      `/procoach/athletes/${deviceId}/gel-usage`,
+      { method: "POST", body: JSON.stringify(payload) }
+    );
+  },
+
+  async importPlanJson(deviceId: string, payload: unknown) {
+    return request<{ imported: number; firstDate: string; lastDate: string }>(
+      `/procoach/athletes/${deviceId}/plan/import-json`,
+      { method: "POST", body: JSON.stringify(payload) }
+    );
+  },
+
+  async getPlan(deviceId: string, opts: { from?: string; to?: string } = {}) {
+    const qs = new URLSearchParams();
+    if (opts.from) qs.set("from", opts.from);
+    if (opts.to) qs.set("to", opts.to);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<{
+      sessions: Array<{
+        session_date: string;
+        day_name: string | null;
+        activity: string;
+        pace_target: string | null;
+        treadmill_speed: string | null;
+        rest_interval: string | null;
+        structure: string | null;
+        planned_km?: number;
+      }>;
+    }>(`/procoach/athletes/${deviceId}/plan${suffix}`);
+  },
+
+  async getPlanToday(deviceId: string, date?: string) {
+    const suffix = date ? `?date=${encodeURIComponent(date)}` : "";
+    return request<{
+      session: null | {
+        session_date: string;
+        day_name: string | null;
+        activity: string;
+        pace_target: string | null;
+        treadmill_speed: string | null;
+        rest_interval: string | null;
+        structure: string | null;
+        planned_km?: number;
+      };
+    }>(`/procoach/athletes/${deviceId}/plan/today${suffix}`);
+  },
+
+  async getCompliance(deviceId: string, opts: { from?: string; to?: string } = {}) {
+    const qs = new URLSearchParams();
+    if (opts.from) qs.set("from", opts.from);
+    if (opts.to) qs.set("to", opts.to);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<{
+      from: string;
+      to: string;
+      plannedSessions: number;
+      plannedKm: number;
+      completedSessions: number;
+      completedKm: number;
+    }>(`/procoach/athletes/${deviceId}/compliance${suffix}`);
   },
 
   // --- AUTENTICAÇÃO ---

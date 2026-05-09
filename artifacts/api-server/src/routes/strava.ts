@@ -18,6 +18,8 @@ function isConfigured(): boolean {
 }
 
 function getRedirectUri(req: Request): string {
+  const explicit = process.env.STRAVA_REDIRECT_URI?.trim();
+  if (explicit) return explicit;
   const domains = process.env.REPLIT_DOMAINS ?? "";
   const primary = domains.split(",")[0]?.trim();
   if (primary) return `https://${primary}/api/strava/callback`;

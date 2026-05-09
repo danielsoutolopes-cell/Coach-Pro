@@ -145,6 +145,26 @@ const AI_WORKOUT_CACHE_KEY = "@procoach_ai_workout_cache_v1";
 const RECOVERY_BLOCK_KEY = "@procoach_recovery_block_v1";
 const COMPLETED_WORKOUT_DAYS_KEY = "@procoach_completed_workout_days_v1";
 
+function getSaoPauloDayKey(d: Date = new Date()): string {
+  return d.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
+function deriveTargetFromNextP1(profile: AthleteProfile): AthleteProfile {
+  const races = profile.races ?? [];
+  const p1s = races.filter((r) => r.priority === "P1");
+  if (p1s.length === 0) return profile;
+  const todayKey = getSaoPauloDayKey();
+  const sorted = [...p1s].sort((a, b) => a.date.localeCompare(b.date));
+  const upcoming = sorted.filter((r) => r.date.slice(0, 10) >= todayKey);
+  const next = upcoming[0] ?? sorted[0]!;
+  return {
+    ...profile,
+    targetRaceName: next.name,
+    targetRaceDate: next.date,
+    targetRaceDistanceKm: next.distanceKm,
+  };
+}
+
 async function fetchAIWorkout(opts: {
   deviceId: string;
   currentWeek: number;
@@ -215,7 +235,7 @@ export function AthleteProvider({ children }: { children: React.ReactNode }) {
       }
       // Restore cached AI workout if present (survives reloads while AI was in-flight)
       const todayStr = new Date().toDateString();
-      const todayKey = new Date().toISOString().slice(0, 10);
+      const todayKey = getSaoPauloDayKey();
       const completedDays: string[] = (() => {
         try {
           const parsed = completedDaysRaw ? JSON.parse(completedDaysRaw) : [];
@@ -238,6 +258,35 @@ export function AthleteProvider({ children }: { children: React.ReactNode }) {
       if (hasCachedWorkout && cachedWorkout) {
         localState = { ...localState, todayWorkout: { ...cachedWorkout, completed: localState.todayWorkout.completed } };
       }
+
+      if (
+        (localState.profile.races?.length ?? 0) === 0 &&
+        localState.profile.targetRaceName === "Maratona São Paulo" &&
+        localState.profile.targetRaceDistanceKm === 42
+      ) {
+        const p1Date = "2026-07-26T15:00:00.000Z";
+        localState = {
+          ...localState,
+          profile: {
+            ...localState.profile,
+            targetRaceName: "Nike SP City Marathon",
+            targetRaceDate: p1Date,
+            targetRaceDistanceKm: 21,
+            races: [
+              {
+                id: "p1-nike-sp-city-marathon-21k-2026",
+                name: "Nike SP City Marathon",
+                date: p1Date,
+                distanceKm: 21,
+                priority: "P1",
+                address: "Praça Charles Miller, São Paulo, SP",
+                raceStartTime: "05:30",
+              },
+            ],
+          },
+        };
+      }
+      localState = { ...localState, profile: deriveTargetFromNextP1(localState.profile) };
       if (!mountedRef.current) return;
       setState(localState);
 
@@ -394,9 +443,10 @@ export function AthleteProvider({ children }: { children: React.ReactNode }) {
 
   const updateProfile = useCallback(
     async (profile: Partial<AthleteProfile>) => {
-      const newProfile = { ...state.profile, ...profile };
-      const newWeek = profile.targetRaceDate
-        ? calculateCurrentWeek(profile.targetRaceDate)
+      const mergedProfile = { ...state.profile, ...profile };
+      const newProfile = deriveTargetFromNextP1(mergedProfile);
+      const newWeek = newProfile.targetRaceDate
+        ? calculateCurrentWeek(newProfile.targetRaceDate)
         : state.currentWeek;
       const baseWorkoutNew = getTodayWorkoutForWeek(newWeek);
       const todayWorkout = buildWorkoutWithInjuryCheck(
@@ -457,7 +507,7 @@ export function AthleteProvider({ children }: { children: React.ReactNode }) {
 
   const markWorkoutComplete = useCallback(async () => {
     const roundedKm = formatDistance(state.todayWorkout.distanceKm);
-    const todayKey = new Date().toISOString().slice(0, 10);
+    const todayKey = getSaoPauloDayKey();
     try {
       const existingRaw = await AsyncStorage.getItem(COMPLETED_WORKOUT_DAYS_KEY);
       const existing = (() => {
