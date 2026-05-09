@@ -1,0 +1,116 @@
+<h2>Equipamentos (Tênis) — layout</h2>
+<p class="subtitle">Km por tênis será calculado a partir dos treinos concluídos. Escolha o layout que prefere para a aba.</p>
+
+<div class="cards">
+  <div class="card" data-choice="layout-a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A) Lista + barra de km</div>
+        <div class="mockup-body">
+          <div class="mock-content">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <div style="font-weight:800;">Equipamentos</div>
+              <div class="mock-button" style="padding:6px 10px;">+ Tênis</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div style="border:1px solid #1E1E1E;border-radius:10px;padding:10px;background:#111;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <div style="font-weight:800;">Olympikus Corre 4</div>
+                  <div style="font-size:12px;color:#888;">312 / 500 km</div>
+                </div>
+                <div style="height:8px;background:#222;border-radius:6px;margin-top:8px;overflow:hidden;">
+                  <div style="height:100%;width:62%;background:#FF5F00;"></div>
+                </div>
+                <div style="margin-top:8px;font-size:11px;color:#666;">Ativo · Último uso: 09/05</div>
+              </div>
+              <div style="border:1px solid #1E1E1E;border-radius:10px;padding:10px;background:#111;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <div style="font-weight:800;">Fila Carbon 3</div>
+                  <div style="font-size:12px;color:#888;">128 / 350 km</div>
+                </div>
+                <div style="height:8px;background:#222;border-radius:6px;margin-top:8px;overflow:hidden;">
+                  <div style="height:100%;width:37%;background:#2196F3;"></div>
+                </div>
+                <div style="margin-top:8px;font-size:11px;color:#666;">Ativo · Último uso: 05/05</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Layout A</h3>
+      <p>Mais rápido para ver “quem está perto de aposentar”.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="layout-b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B) Visão geral + detalhes</div>
+        <div class="mockup-body">
+          <div class="mock-content">
+            <div style="display:flex;gap:10px;margin-bottom:10px;">
+              <div style="flex:1;border:1px solid #1E1E1E;border-radius:10px;padding:10px;background:#111;">
+                <div style="font-size:10px;color:#666;letter-spacing:2px;">ATIVOS</div>
+                <div style="font-size:20px;font-weight:900;color:#FF5F00;">3</div>
+              </div>
+              <div style="flex:1;border:1px solid #1E1E1E;border-radius:10px;padding:10px;background:#111;">
+                <div style="font-size:10px;color:#666;letter-spacing:2px;">ALERTAS</div>
+                <div style="font-size:20px;font-weight:900;color:#EF4444;">1</div>
+              </div>
+            </div>
+            <div style="border:1px solid #1E1E1E;border-radius:10px;padding:10px;background:#111;">
+              <div style="font-weight:800;margin-bottom:8px;">Olympikus Corre 4</div>
+              <div style="font-size:12px;color:#888;margin-bottom:8px;">312 km · Vida útil 500 km</div>
+              <div style="display:flex;gap:8px;">
+                <div class="mock-button" style="flex:1;">Detalhes</div>
+                <div class="mock-button" style="flex:1;">Aposentar</div>
+              </div>
+            </div>
+            <div style="margin-top:10px;font-size:11px;color:#666;">Lista reduzida abaixo</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Layout B</h3>
+      <p>Melhor para “gestão”: KPIs e ações rápidas.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="layout-c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C) Tabs: Ativos | Arquivados</div>
+        <div class="mockup-body">
+          <div class="mock-content">
+            <div style="display:flex;gap:8px;margin-bottom:10px;">
+              <div style="flex:1;text-align:center;border:1px solid #FF5F00;border-radius:999px;padding:6px;background:#FF5F0018;color:#FF5F00;font-weight:800;">Ativos</div>
+              <div style="flex:1;text-align:center;border:1px solid #1E1E1E;border-radius:999px;padding:6px;color:#888;">Arquivados</div>
+            </div>
+            <div style="border:1px solid #1E1E1E;border-radius:10px;padding:10px;background:#111;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div style="font-weight:800;">Corre Turbo</div>
+                <div style="font-size:12px;color:#888;">52 / 600 km</div>
+              </div>
+              <div style="height:8px;background:#222;border-radius:6px;margin-top:8px;overflow:hidden;">
+                <div style="height:100%;width:9%;background:#4CAF50;"></div>
+              </div>
+              <div style="margin-top:8px;font-size:11px;color:#666;">Ativo</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Layout C</h3>
+      <p>Mais organizado quando você tiver muitos tênis.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">Fluxo Strava (decidido)</div>
+  <p class="subtitle">Ao detectar treino novo: exige escolher tênis nas corridas; bike/força marca “Sem tênis” automaticamente.</p>
+</div>
