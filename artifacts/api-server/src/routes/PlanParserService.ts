@@ -106,7 +106,7 @@ export function parseKmhNumber(raw: string | null): number | null {
 
 export function parsePaceMinPerKm(raw: string | null): number | null {
   if (!raw) return null;
-  const m = raw.match(/(\d{1,2})\s*:\s*(\d{2})/);
+  const m = raw.match(/(\d{1,2})\s*:\s*(\d{1,2})/);
   if (m?.[1] && m?.[2]) {
     const mm = Number(m[1]);
     const ss = Number(m[2]);
@@ -299,6 +299,7 @@ export function inferModalities(activity: string, structure: string | null): str
     hay.includes("longao") ||
     hay.includes("longão") ||
     hay.includes("prova") ||
+    hay.includes("fartlek") ||
     /(\d+(?:[.,]\d+)?)\s*km\b/i.test(hay);
   if (hasRun) out.push("run");
   if (hay.includes("bike") || /\b\d+\s*min\s*bike\b/i.test(hay)) out.push("bike");

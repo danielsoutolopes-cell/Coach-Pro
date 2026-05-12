@@ -40,7 +40,8 @@ import {
   ensureStrengthTables,
   ensureStrengthCatalogSeed,
   ensureShoesTables,
-  ensureBioimpedanceTable
+  ensureBioimpedanceTable,
+  ensureAthletesRacesColumn
 } from "./migrations";
 
 const router: IRouter = Router();
@@ -60,6 +61,33 @@ function normalizeEntryDate(raw: string): string {
   const parsed = new Date(raw);
   if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
   return new Date().toISOString().slice(0, 10);
+}
+
+function getSaoPauloDayKey(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
+function getSaoPauloTomorrowKey(): string {
+  const d = new Date();
+  const spDate = new Date(d.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+  spDate.setDate(spDate.getDate() + 1);
+  const yyyy = spDate.getFullYear();
+  const mm = String(spDate.getMonth() + 1).padStart(2, "0");
+  const dd = String(spDate.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function computeRacePointers(races: any[]) {
+  if (!Array.isArray(races)) return { nextRace: null, nextP1: null, anchor: null };
+  const today = getSaoPauloDayKey();
+  const valid = races.filter((r) => r.data && r.data >= today && r.status !== "cancelada");
+  valid.sort((a, b) => a.data.localeCompare(b.data));
+
+  const nextRace = valid[0] ?? null;
+  const nextP1 = valid.find((r) => r.tipo_tatico === "P1") ?? null;
+  const anchor = nextP1; // Regra de negócio: A âncora do macrociclo é a próxima P1
+
+  return { nextRace, nextP1, anchor };
 }
 
 function asNumberOrNull(val: unknown): number | null {
@@ -124,8 +152,6 @@ router.post("/procoach/athletes/sync", async (req: Request, res: Response) => {
   }
 
   // Desestruturamos os dados validados pelo Zod.
-  // 'races' foi removido do objeto de inserção/atualização conforme a instrução,
-  // assumindo que não está no schema do Drizzle para inserção direta.
   const { deviceId, ...restOfAthleteData } = parseResult.data;
 
   const existing = await db
@@ -145,7 +171,6 @@ router.post("/procoach/athletes/sync", async (req: Request, res: Response) => {
         deviceId: deviceId, // deviceId é obrigatório e já vem do parseResult.data
         targetRaceDistanceKm: restOfAthleteData.targetRaceDistanceKm ? roundKm(restOfAthleteData.targetRaceDistanceKm) : 42,
         targetRaceDate: defaultRaceDate, // Garante que a data padrão seja usada se não fornecida
-        // 'races' removido conforme instrução. Se for uma coluna JSONB, ela deve ser incluída aqui.
       })
       .returning();
     athlete = created;
@@ -156,7 +181,6 @@ router.post("/procoach/athletes/sync", async (req: Request, res: Response) => {
         ...Object.fromEntries(
           Object.entries(restOfAthleteData).filter(([, value]) => value !== undefined)
         ),
-        // 'races' removido conforme instrução. Se for uma coluna JSONB, ela deve ser incluída aqui.
         updatedAt: new Date(),
       })
       .where(eq(athletesTable.deviceId, deviceId) as any)
@@ -164,17 +188,33 @@ router.post("/procoach/athletes/sync", async (req: Request, res: Response) => {
     athlete = updated;
   }
 
-  res.json({ athlete });
+  // Atualiza o Calendário Perene de forma segura (ignorando restrições temporárias do Zod/Drizzle)
+  const racesRaw = Array.isArray(body.races) ? body.races : [];
+  await ensureAthletesRacesColumn();
+  await db.execute(sql`
+    UPDATE procoach_athletes
+    SET races = ${JSON.stringify(racesRaw)}::jsonb
+    WHERE device_id = ${deviceId}
+  `);
+
+  const updatedRows = await db.execute(sql`SELECT * FROM procoach_athletes WHERE device_id = ${deviceId} LIMIT 1`) as any;
+  const updatedAthlete = updatedRows.rows[0];
+  const pointers = computeRacePointers(typeof updatedAthlete.races === "string" ? JSON.parse(updatedAthlete.races) : updatedAthlete.races);
+
+  res.json({ athlete: updatedAthlete, pointers });
 });
 
 router.get("/procoach/me", async (_req: Request, res: Response) => {
   const athleteId = await getOrCreateMonoAthleteId();
-  const rows = await db
-    .select()
-    .from(athletesTable)
-    .where(eq(athletesTable.id, athleteId) as any)
-    .limit(1);
-  res.json({ athlete: rows[0] ?? null });
+  await ensureAthletesRacesColumn();
+  const rows = await db.execute(sql`SELECT * FROM procoach_athletes WHERE id = ${athleteId} LIMIT 1`) as any;
+  const athlete = rows.rows[0] ?? null;
+  
+  let pointers = { nextRace: null, nextP1: null, anchor: null };
+  if (athlete && athlete.races) {
+    pointers = computeRacePointers(typeof athlete.races === "string" ? JSON.parse(athlete.races) : athlete.races);
+  }
+  res.json({ athlete, pointers });
 });
 
 router.post("/procoach/me/workouts", async (req: Request, res: Response) => {
@@ -274,16 +314,25 @@ router.post("/procoach/me/workout-feedback", async (req: Request, res: Response)
 
 router.get("/procoach/me/workouts", async (req: Request, res: Response) => {
   const limitParam = Number(req.query.limit) || 30;
+  const offsetParam = Math.max(0, Number(req.query.offset) || 0);
   const athleteId = await getOrCreateMonoAthleteId();
+
+  const totalRes = await db.execute(sql`
+    SELECT COUNT(*)::int AS count
+    FROM procoach_workout_entries
+    WHERE athlete_id = ${athleteId}
+  `) as { rows: Array<{ count: number }> };
+  const totalCount = totalRes.rows[0]?.count ?? 0;
 
   const entries = await db
     .select()
     .from(workoutEntriesTable)
     .where(eq(workoutEntriesTable.athleteId, athleteId) as any)
     .orderBy(desc(workoutEntriesTable.createdAt) as any)
-    .limit(limitParam);
+    .limit(limitParam)
+    .offset(offsetParam);
 
-  res.json({ entries });
+  res.json({ entries, totalCount });
 });
 
 // ─── Shoes (Equipamentos) ─────────────────────────────────────────────────────
@@ -1503,19 +1552,55 @@ router.post(["/procoach/me/weekly-report/send", "/procoach/weekly-report/send"],
   res.json({ sent: true, weekStart: weekStartISO, weekEnd: weekEndISO });
 });
 
+router.post(["/procoach/me/daily-briefing/send", "/procoach/daily-briefing/send"], async (req: Request, res: Response) => {
+  const secret = req.headers["x-cron-secret"];
+  if (process.env.CRON_SECRET && secret !== process.env.CRON_SECRET) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  const athleteId = await getOrCreateMonoAthleteId();
+  const tomorrowISO = getSaoPauloTomorrowKey();
+
+  const rows = await db.execute(sql`
+    SELECT session_date, activity, pace_target, treadmill_speed, rest_interval, structure, planned_km
+    FROM procoach_plan_sessions
+    WHERE athlete_id = ${athleteId} AND session_date = ${tomorrowISO}
+    LIMIT 1
+  `) as { rows: Array<any> };
+
+  const session = rows.rows[0];
+  if (!session) {
+    await sendTelegram(`🌙 *Briefing Noturno* (${tomorrowISO})\n\nAmanhã é dia de *Descanso* (ou treino não planejado). Aproveite para recuperar o corpo!`);
+    res.json({ sent: true, date: tomorrowISO, session: null });
+    return;
+  }
+
+  const msg = `🌙 *Briefing de Amanhã* (${tomorrowISO})\n\n` +
+              `🏃 *Atividade:* ${session.activity}\n` +
+              (session.planned_km ? `📏 *Volume:* ${session.planned_km} km\n` : "") +
+              (session.pace_target ? `⏱️ *Pace Alvo:* ${session.pace_target}\n` : "") +
+              (session.structure ? `📋 *Estrutura:* ${session.structure}\n` : "");
+
+  await sendTelegram(msg);
+  res.json({ sent: true, date: tomorrowISO, session });
+});
+
 router.get("/procoach/athletes/:deviceId", async (req: Request, res: Response) => {
   const deviceId = String(req.params.deviceId);
-  const rows = await db
-    .select()
-    .from(athletesTable)
-    .where(eq(athletesTable.deviceId, deviceId) as any)
-    .limit(1);
+  await ensureAthletesRacesColumn();
+  const rows = await db.execute(sql`SELECT * FROM procoach_athletes WHERE device_id = ${deviceId} LIMIT 1`) as any;
 
-  if (rows.length === 0) {
+  if (rows.rows.length === 0) {
     res.status(404).json({ error: "Athlete not found" });
     return;
   }
-  res.json({ athlete: rows[0] });
+  const athlete = rows.rows[0];
+  let pointers = { nextRace: null, nextP1: null, anchor: null };
+  if (athlete && athlete.races) {
+    pointers = computeRacePointers(typeof athlete.races === "string" ? JSON.parse(athlete.races) : athlete.races);
+  }
+  res.json({ athlete, pointers });
 });
 
 router.post("/procoach/athletes/:deviceId/workouts", async (req: Request, res: Response) => {
@@ -1631,10 +1716,6 @@ router.post("/procoach/athletes/:deviceId/workout-feedback", async (req: Request
   await upsertWorkoutFeedback({ athleteId, entryDate, rpe, painLevel, notes });
   res.json({ ok: true, entryDate });
 });
-
-function getSaoPauloDayKey(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
-}
 
 router.post("/procoach/athletes/:deviceId/plan/import-text", async (req: Request, res: Response) => {
   const deviceId = String(req.params.deviceId);
@@ -1917,6 +1998,7 @@ router.get("/procoach/athletes/:deviceId/compliance", async (req: Request, res: 
 router.get("/procoach/athletes/:deviceId/workouts", async (req: Request, res: Response) => {
   const deviceId = String(req.params.deviceId);
   const limitParam = Number(req.query.limit) || 30;
+  const offsetParam = Math.max(0, Number(req.query.offset) || 0);
 
   const athletes = await db
     .select({ id: athletesTable.id })
@@ -1929,14 +2011,24 @@ router.get("/procoach/athletes/:deviceId/workouts", async (req: Request, res: Re
     return;
   }
 
+  const athleteId = athletes[0]!.id;
+
+  const totalRes = await db.execute(sql`
+    SELECT COUNT(*)::int AS count
+    FROM procoach_workout_entries
+    WHERE athlete_id = ${athleteId}
+  `) as { rows: Array<{ count: number }> };
+  const totalCount = totalRes.rows[0]?.count ?? 0;
+
   const entries = await db
     .select()
     .from(workoutEntriesTable)
-    .where(eq(workoutEntriesTable.athleteId, athletes[0]!.id) as any)
+    .where(eq(workoutEntriesTable.athleteId, athleteId) as any)
     .orderBy(desc(workoutEntriesTable.createdAt) as any)
-    .limit(limitParam);
+    .limit(limitParam)
+    .offset(offsetParam);
 
-  res.json({ entries });
+  res.json({ entries, totalCount });
 });
 
 router.post("/procoach/athletes/:deviceId/push-token", async (req: Request, res: Response) => {

@@ -7,7 +7,18 @@ export function defaultRaceDateISO(): string {
   return new Date(Date.now() + 16 * 7 * 24 * 60 * 60 * 1000).toISOString();
 }
 
+let athletesRacesReady = false;
+export async function ensureAthletesRacesColumn(): Promise<void> {
+  if (athletesRacesReady) return;
+  await db.execute(sql`
+    ALTER TABLE IF EXISTS procoach_athletes
+      ADD COLUMN IF NOT EXISTS races JSONB NOT NULL DEFAULT '[]'::jsonb
+  `);
+  athletesRacesReady = true;
+}
+
 export async function getOrCreateMonoAthleteId(): Promise<number> {
+  await ensureAthletesRacesColumn();
   const existing = await db
     .select({ id: athletesTable.id })
     .from(athletesTable)
