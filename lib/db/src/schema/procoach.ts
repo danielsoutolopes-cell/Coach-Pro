@@ -31,6 +31,7 @@ export const athletesTable = pgTable("procoach_athletes", {
   painLevel: integer("pain_level").notNull().default(0),
   currentWeek: integer("current_week").notNull().default(1),
   expoPushToken: varchar("expo_push_token", { length: 200 }),
+  macrocycleRaceId: varchar("macrocycle_race_id", { length: 255 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

@@ -77,7 +77,14 @@ function getSaoPauloTomorrowKey(): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function computeRacePointers(races: any[]) {
+/**
+ * Calcula os ponteiros de prova para o atleta (Próxima Prova, Próxima P1 e Âncora do Macrociclo).
+ * 
+ * @param races - Array de provas cadastradas.
+ * @param macrocycleRaceId - (Opcional) ID da prova selecionada manualmente pelo usuário para ser a âncora.
+ * @returns Ponteiros para nextRace, nextP1 e anchor.
+ */
+function computeRacePointers(races: any[], macrocycleRaceId?: string | null) {
   if (!Array.isArray(races)) return { nextRace: null, nextP1: null, anchor: null };
   const today = getSaoPauloDayKey();
   const valid = races.filter((r) => r.data && r.data >= today && r.status !== "cancelada");
@@ -85,7 +92,14 @@ function computeRacePointers(races: any[]) {
 
   const nextRace = valid[0] ?? null;
   const nextP1 = valid.find((r) => r.tipo_tatico === "P1") ?? null;
-  const anchor = nextP1; // Regra de negócio: A âncora do macrociclo é a próxima P1
+  
+  // Prioridade 1: Buscar a prova na lista valid onde id === macrocycleRaceId
+  let anchor = macrocycleRaceId ? valid.find((r) => String(r.id) === String(macrocycleRaceId)) ?? null : null;
+
+  // Prioridade 2 (Fallback): Se não encontrou a prova manual, usa a próxima P1
+  if (!anchor) {
+    anchor = nextP1;
+  }
 
   return { nextRace, nextP1, anchor };
 }
@@ -199,7 +213,10 @@ router.post("/procoach/athletes/sync", async (req: Request, res: Response) => {
 
   const updatedRows = await db.execute(sql`SELECT * FROM procoach_athletes WHERE device_id = ${deviceId} LIMIT 1`) as any;
   const updatedAthlete = updatedRows.rows[0];
-  const pointers = computeRacePointers(typeof updatedAthlete.races === "string" ? JSON.parse(updatedAthlete.races) : updatedAthlete.races);
+  const pointers = computeRacePointers(
+    typeof updatedAthlete.races === "string" ? JSON.parse(updatedAthlete.races) : updatedAthlete.races,
+    updatedAthlete.macrocycleRaceId ?? updatedAthlete.macrocycle_race_id
+  );
 
   res.json({ athlete: updatedAthlete, pointers });
 });
@@ -212,7 +229,10 @@ router.get("/procoach/me", async (_req: Request, res: Response) => {
   
   let pointers = { nextRace: null, nextP1: null, anchor: null };
   if (athlete && athlete.races) {
-    pointers = computeRacePointers(typeof athlete.races === "string" ? JSON.parse(athlete.races) : athlete.races);
+    pointers = computeRacePointers(
+      typeof athlete.races === "string" ? JSON.parse(athlete.races) : athlete.races,
+      athlete.macrocycleRaceId ?? athlete.macrocycle_race_id
+    );
   }
   res.json({ athlete, pointers });
 });
@@ -979,6 +999,24 @@ router.post("/procoach/me/plan/import-json", async (req: Request, res: Response)
   });
 });
 
+async function getRainProbability(dateISO: string): Promise<number> {
+  try {
+    const HOME_LAT = -23.6087;
+    const HOME_LON = -46.6676;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${HOME_LAT}&longitude=${HOME_LON}&daily=precipitation_probability_max&timezone=America%2FSao_Paulo`;
+    const r = await fetch(url);
+    if (!r.ok) return 0;
+    const data = await r.json() as any;
+    const idx = data.daily?.time?.findIndex((t: string) => t === dateISO);
+    if (idx !== undefined && idx >= 0) {
+      return Number(data.daily.precipitation_probability_max[idx]) || 0;
+    }
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
 router.get("/procoach/me/plan", async (req: Request, res: Response) => {
   const from = typeof req.query.from === "string" ? req.query.from : undefined;
   const to = typeof req.query.to === "string" ? req.query.to : undefined;
@@ -1009,7 +1047,19 @@ router.get("/procoach/me/plan/today", async (req: Request, res: Response) => {
     LIMIT 1
   `) as { rows: Array<Record<string, unknown>> };
 
-  res.json({ session: rows.rows[0] ?? null });
+  let session = rows.rows[0] ? { ...rows.rows[0] } : null;
+
+  if (session) {
+    const rainProb = await getRainProbability(date);
+    const suggestTreadmill = rainProb > 70;
+    Object.assign(session, { suggestTreadmill, rainProbability: rainProb });
+    if (suggestTreadmill && session.treadmill_speed) {
+      // Prioriza Velocidade na esteira ocultando o pace de rua
+      session.pace_target = null;
+    }
+  }
+
+  res.json({ session });
 });
 
 router.get("/procoach/me/plan/next", async (req: Request, res: Response) => {
@@ -1675,7 +1725,10 @@ router.get("/procoach/athletes/:deviceId", async (req: Request, res: Response) =
   const athlete = rows.rows[0];
   let pointers = { nextRace: null, nextP1: null, anchor: null };
   if (athlete && athlete.races) {
-    pointers = computeRacePointers(typeof athlete.races === "string" ? JSON.parse(athlete.races) : athlete.races);
+    pointers = computeRacePointers(
+      typeof athlete.races === "string" ? JSON.parse(athlete.races) : athlete.races,
+      athlete.macrocycleRaceId ?? athlete.macrocycle_race_id
+    );
   }
   res.json({ athlete, pointers });
 });
@@ -1734,6 +1787,12 @@ router.post("/procoach/athletes/:deviceId/workouts", async (req: Request, res: R
     .returning();
 
   await upsertWorkoutFeedback({ athleteId, entryDate, rpe, painLevel, notes });
+
+  const adherence = type === "corrida" && roundedKm >= 3;
+  if (!adherence) {
+    res.json({ entry });
+    return;
+  }
 
   const existing = await db
     .select()
@@ -1995,7 +2054,19 @@ router.get("/procoach/athletes/:deviceId/plan/today", async (req: Request, res: 
     planned_km: number | string;
   }> };
 
-  res.json({ session: rows.rows[0] ?? null });
+  let session = rows.rows[0] ? { ...rows.rows[0] } : null;
+
+  if (session) {
+    const rainProb = await getRainProbability(date);
+    const suggestTreadmill = rainProb > 70;
+    Object.assign(session, { suggestTreadmill, rainProbability: rainProb });
+    if (suggestTreadmill && session.treadmill_speed) {
+      // Prioriza Velocidade na esteira ocultando o pace de rua
+      session.pace_target = null;
+    }
+  }
+
+  res.json({ session });
 });
 
 router.get("/procoach/athletes/:deviceId/plan/next", async (req: Request, res: Response) => {
@@ -2060,6 +2131,8 @@ router.get("/procoach/athletes/:deviceId/compliance", async (req: Request, res: 
     WHERE athlete_id = ${athleteId}
       AND entry_date >= ${fromSafe}
       AND entry_date <= ${to}
+      AND type = 'corrida'
+      AND distance_km >= 3
   `) as { rows: Array<{ completed_sessions: number; completed_km: number }> };
 
   res.json({

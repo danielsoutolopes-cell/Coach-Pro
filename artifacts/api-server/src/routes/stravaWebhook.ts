@@ -87,6 +87,26 @@ async function generateWithGemini(prompt: string): Promise<string> {
 }
 
 /**
+ * Função auxiliar para enviar notificação Push via Expo.
+ */
+async function sendExpoPushNotification(expoPushToken: string, title: string, body: string) {
+  if (!expoPushToken) return;
+  try {
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Accept-encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ to: expoPushToken, sound: 'default', title, body }),
+    });
+  } catch (err) {
+    console.error('Erro ao enviar notificação Push do Expo:', err);
+  }
+}
+
+/**
  * Função assíncrona para buscar os detalhes do treino e processar no Coach Pro.
  */
 async function processStravaActivity(athleteId: number, activityId: number) {
@@ -176,6 +196,15 @@ async function processStravaActivity(athleteId: number, activityId: number) {
           }
         }
         console.log('✅ Salvo no banco de dados Neon com sucesso!');
+
+        // 3.3 Dispara a notificação Push caso seja uma corrida (exigência de tênis)
+        if (procoachType === 'corrida' && athlete.expoPushToken) {
+          void sendExpoPushNotification(
+            athlete.expoPushToken,
+            '🏃 Novo treino salvo!',
+            `Seu treino "${activityData.name}" chegou do Strava. Qual tênis você usou hoje?`
+          );
+        }
 
         // 4. Análise com Gemini e envio pro Telegram
         const pace = distKm > 0 ? (durMin / distKm) : 0;
