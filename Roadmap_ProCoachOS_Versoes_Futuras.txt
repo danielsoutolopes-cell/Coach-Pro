@@ -1,0 +1,89 @@
+ROADMAP — PROCOACH OS (VERSÕES FUTURAS)
+Base: V6.0
+
+
+V6.0 (BASE ATUAL)
+- Importador de plano via JSON com suporte a plano_treinamento.treinos[] e treino_hoje
+- Plano importado visível no app (aba Plano → IMPORTADO) + uso em Hoje/Próximo treino
+- Persistência de detalhes estruturados do plano no banco (detalhes_json)
+- Lembrete dominical (notificação local) para gerar PDF semanal
+- Integrações: Strava, Spotify, Telegram (briefing 22h via agendamento)
+
+
+V6.1 (FORÇA A/B/C + CONFIABILIDADE)
+- Biblioteca de Força (A/B/C) no servidor (Neon), editável no app
+  - Catálogo de exercícios com busca/autocomplete (nome + sinônimos)
+  - Exercícios por ficha com: séries, reps (texto), descanso (s), RPE alvo, carga, tempo, observações
+  - Expansão automática no “Plano Importado” quando o treino mencionar “Treino A/B/C”
+- Confiabilidade das integrações
+  - Timeouts e respostas mais claras no servidor para reduzir 502 silencioso (Spotify/Strava/Telegram)
+  - Diagnóstico rápido: sinais “configurado / conectado / último sync”
+- Operacional
+  - Checklist de deploy: versão do app, API URL, status do servidor e credenciais (sem expor segredos)
+
+
+V6.2 (BIKE + MUSCULAÇÃO NO PLANO)
+- Bike por tempo (minutos) como parte do treino planejado (e do treino do dia)
+  - Modalidade “Bike Z2 / Giro Indolor” usada pelo Radar Articular
+- Plano importado com referência a força por ficha (A/B/C)
+  - Ex.: “Corrida (Leve) + Treino B”
+  - O app mostra corrida + ficha expandida na mesma tela
+  - Parsing (definitivo):
+    - Bike vem embutida em `estrutura` (ex.: “+ 30min Bike”)
+    - Se vier “+ Bike” sem minutos: assumir 30min
+    - Bike e Musc. não entram nos segmentos de corrida; viram campos próprios no `details_json`
+
+
+V6.3 (PLANO ESTRUTURADO — AQ / PRINCIPAL / DQ)
+- Interpretador de “estrutura” para gerar segmentos (Aquecimento / Principal / Desaquecimento)
+- Persistir segmentos como dados estruturados e renderizar como “blocos” no app
+- Conversão automática pace ↔ km/h (esteira) usando configurações operacionais do plano
+- Validação de consistência: volume_total_km vs soma dos segmentos
+  - Blocos (definitivo):
+    - AQ: partes marcadas com “AQ”
+    - DQ: partes marcadas com “DQ”
+    - Principal: todo o resto
+    - Se não existir AQ/DQ: tudo vira Principal
+  - Telemetria de esteira (tiros) — volumes “Corpo” vs “Painel”:
+    - Vel_Repouso_Ativo = 3.0 km/h
+    - Tempo_H = repousoSeg / 3600
+    - Qtd_Repousos = reps - 1
+    - Regra A (tiro curto < 800m):
+      - Volume Real (Corpo) = AQ_km + (reps * distTiroKm) + DQ_km
+      - Distância Oculta (Lona Vazia) = velTiroKmh * Tempo_H
+      - Volume Painel (Esteira) = Volume Real + (Qtd_Repousos * Distância Oculta)
+      - Mostrar Real e Painel
+    - Regra B (tiro longo >= 800m):
+      - Distância Caminhada = 3.0 * Tempo_H
+      - Volume Único = AQ_km + (reps * distTiroKm) + (Qtd_Repousos * Distância Caminhada) + DQ_km
+      - Mostrar apenas um Volume Total
+    - Fonte de velocidade do tiro:
+      - Preferir `vel_esteira` quando existir
+      - Se não existir, derivar de `pace_alvo` (min/km → km/h)
+    - Persistir em `details_json` para o app renderizar igual nas telas:
+      - Plano IMPORTADO, Próximo Treino, Hoje/Check-in
+
+
+V6.4 (IA TÁTICA — REPLANEJAMENTO)
+- IA ajusta treino em caso de:
+  - chuva (migração para esteira / ajuste de intensidade)
+  - longão (troca para blocos ou redução de impacto)
+  - dor/risco (Radar Articular → bike Z2 / descanso)
+- Armazenar “plano original vs ajustado” no banco e exibir diffs no app
+
+
+V6.5 (PROVAS P1/P2/P3 + RADAR ARTICULAR)
+- Hierarquia P1/P2/P3 aplicada em:
+  - polimento/tapering
+  - recomendações de intensidade (simulado sob fadiga vs prova alvo)
+  - recomendações de tênis (placa vs rodagem)
+- Radar Articular (segurança biomecânica)
+  - input: dor/desconforto pós-treino (check-in)
+  - ação: reduzir impacto no dia seguinte ou substituir por bike Z2 (“Giro Indolor”)
+  - atenção: prótese reversa (ombro) e tendões; travas de risco para placa vs rodagem
+
+
+V6.6 (EXPORTAÇÃO + INTEGRAÇÕES EXTERNAS)
+- Exportar plano e histórico em JSON padrão
+- Integração com calendário (ICS/Google Calendar)
+- Exportar relatórios semanais automaticamente (PDF) via Telegram/Email

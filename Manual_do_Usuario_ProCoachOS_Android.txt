@@ -1,0 +1,477 @@
+MANUAL DO USUÁRIO (ANDROID) — PROCOACH OS
+Versão do app: ProCoach OS V6.1
+Perfil do usuário: Treinos de corrida + academia
+
+
+1) COMEÇANDO (PRIMEIRA VEZ)
+
+1.1 Abrir o app
+1. Abra o ProCoach OS.
+2. Aguarde a tela inicial carregar.
+
+O que você deve ver (esperado):
+- Título “PROCOACH OS V6.1”
+- Data do dia
+- “DIAS P/ PROVA”
+- Cards “PREVISÃO DE HOJE” e “TREINO DO DIA”
+
+
+1.2 Ajustar seu nome (Perfil)
+1. Vá na aba “Status”.
+2. Procure o card “PERFIL DO ATLETA”.
+3. No campo “NOME”, digite seu nome.
+4. Toque em “OK”.
+
+O que você deve ver (esperado):
+- O nome fica salvo e aparece no app sem precisar digitar novamente.
+
+
+2) COMO FUNCIONA O PROCOACH OS (CONCEITOS IMPORTANTES)
+
+2.1 Mono usuário (sem login)
+- O app é mono usuário: não existe autenticação e você não precisa “logar”.
+- Seus dados são salvos no servidor (Neon) automaticamente.
+
+2.2 Prova Alvo (regra)
+- Você pode ter várias provas P1/P2/P3 cadastradas.
+- Na tela de Provas, o app separa:
+  - “Próxima prova”: a próxima por data (calendário).
+  - “Macrociclo (âncora)”: a prova que dita a semana/fase do ciclo de 16 semanas.
+  - “Próxima P1 (ref)”: a próxima prova marcada como P1 (apenas referência).
+
+2.3 Treino do Dia x Plano Importado
+- Treino do dia: o treino que aparece para você executar hoje (pode ser do app/IA).
+- Plano importado: cronograma oficial que você importou (ex.: Nike SP 21K).
+- O app pode mostrar o “PLANO DE HOJE” e, ao mesmo tempo, manter o “TREINO DO DIA”.
+  - Aba “Plano”: você pode alternar entre “MATRIZ” (plano base) e “IMPORTADO” (plano vindo do servidor).
+
+
+3) TELA INICIAL (HOME) — ROTEIRO DIÁRIO
+
+3.1 Card “PREVISÃO DE HOJE”
+Para que serve:
+- Ajustar expectativa do treino (chuva/vento/temperatura).
+
+O que você deve ver (esperado):
+- Emoji do tempo
+- Temperatura mínima/máxima
+- Chance de chuva (%)
+- Vento (km/h)
+
+
+3.2 Card “PLANO DE HOJE” (quando o plano está importado)
+Para que serve:
+- Mostrar o treino planejado do cronograma importado para a data de hoje.
+
+O que você deve ver (esperado):
+- “PLANO DE HOJE”
+- Atividade (ex.: “Corrida (Leve)”)
+- Pace alvo (se existir)
+- Repouso (se existir)
+- Estrutura (detalhes)
+- Km planejado (quando identificado)
+
+Se aparecer “Nenhum treino importado para hoje”:
+- Confirme se você já importou o plano (veja seção 6).
+- Confirme se a data no seu cronograma está no formato YYYY-MM-DD (ex.: 2026-05-10).
+
+
+3.3 Card “TREINO DO DIA”
+Para que serve:
+- É o treino que você vai executar hoje e depois marcar como concluído.
+
+O que você deve ver (esperado):
+- Tipo do treino (Corrida, Bike, Regenerativo, Força, Descanso)
+- Distância em km quando for corrida/bike
+- Alertas (se houver), por exemplo “ALERTA DE PREVENÇÃO”
+
+
+3.4 Concluir treino (muito importante)
+Quando você terminar o treino:
+1. No card “TREINO DO DIA”, toque para marcar como concluído.
+2. Aguarde a vibração de sucesso.
+3. Responda as perguntas que aparecerem.
+
+O que você deve ver (esperado):
+- O treino passa a estado “concluído”.
+- O app pode abrir perguntas rápidas (Debrief).
+
+
+4) LONGÕES E PROVAS — GÉIS + DEBRIEF
+
+4.1 Recomendação de géis (regra padrão)
+- 1º gel depois de 1 hora
+- depois, a cada 30 minutos
+
+Observação:
+- A recomendação é calculada conforme a duração estimada.
+
+
+4.2 Concluir longão
+Quando você marca um longão como concluído:
+1. O app pergunta “Quantos géis você usou?”
+2. Você escolhe 0/1/2+/4+/etc.
+3. O app abate do estoque automaticamente.
+4. Depois ele pergunta o Debrief (RPE e Dor).
+
+O que você deve ver (esperado):
+- Pop-up de géis usados
+- Depois pop-ups de Debrief
+
+
+4.3 Concluir prova (modo prova)
+Quando você conclui uma prova:
+1. O app pergunta quantos géis você usou (abate do estoque).
+2. Depois pergunta o Debrief.
+
+
+5) DEBRIEF PÓS-TREINO (RPE + DOR)
+
+Para que serve:
+- Registrar esforço e dor para histórico e ajuste futuro.
+
+Fluxo:
+1. O app pergunta se você quer registrar.
+2. RPE (1–10): escolha conforme seu esforço.
+3. Dor (0–5): escolha conforme sua dor.
+
+O que você deve ver (esperado):
+- Pop-ups sequenciais para escolher valores.
+
+Dica:
+- Seja consistente: use a mesma lógica toda semana.
+
+
+6) ABA STATUS — PLANO, COMPLIANCE, ESTOQUE E BIOIMPEDÂNCIA
+
+6.1 Importar Plano (JSON) — jeito mais fácil
+Use isso quando você tem seu plano em JSON (como o “plano_treinamento” com `treinos[]`).
+
+Passo a passo:
+1. Vá na aba “Status”.
+2. Role até “IMPORTAR PLANO (JSON)”.
+3. Cole o JSON completo no campo (começa com “{” e termina com “}”).
+4. Toque em “IMPORTAR PARA O NEON”.
+5. Aguarde o retorno “Importado: X treinos (data → data)”.
+
+O que você deve ver (esperado):
+- Mensagem verde confirmando o total importado.
+
+Formatos aceitos (exemplos):
+- `plano_treinamento.treinos[]` (recomendado)
+- `plano_treinamento.treino_hoje` (1 treino)
+- `plano_treinamento.cronograma[]` (legado)
+
+6.1.1 Importar Plano (PDF com tabela)
+Use isso quando você tem a planilha de treino em PDF (com tabela).
+
+Passo a passo:
+1. Vá na aba “Status”.
+2. Role até “IMPORTAR PLANO (JSON)”.
+3. Toque em “IMPORTAR VIA PDF (TABELA)”.
+4. Selecione o PDF.
+5. O app vai mostrar um PREVIEW com o texto detectado (editável).
+6. Toque em “IMPORTAR”.
+
+O que você deve ver (esperado):
+- “Detectei X linha(s) com data” e um campo com o texto editável.
+- Depois, a mesma mensagem verde de sucesso do import (Importado: X treinos…).
+
+Dica:
+- Se “Detectei 0 linhas”, envie um PDF de exemplo (o parser depende do formato da tabela).
+
+
+6.2 Verificar plano importado (lista de checagem)
+Passo a passo:
+1. No card “IMPORTAR PLANO (JSON)”, toque em “VERIFICAR PLANO IMPORTADO”.
+2. O app lista os próximos treinos salvos.
+
+O que você deve ver (esperado):
+- Uma lista com data + atividade + detalhes.
+
+
+6.3 Compliance da semana (planejado x concluído)
+Para que serve:
+- Ver seu cumprimento semanal: sessões e km planejados vs concluídos.
+
+O que você deve ver (esperado):
+- “COMPLIANCE DA SEMANA”
+- Sessões: concluídas / planejadas e %
+- Km: concluídos / planejados e %
+- Intervalo de datas (segunda → hoje)
+
+Se aparecer “Sem dados ainda”:
+- Importe o plano (para existir “planejado”).
+- Marque treinos como concluídos (para existir “concluído”).
+
+
+6.4 Estoque de géis
+Passo a passo:
+1. Em “ESTOQUE DE GÉIS”, veja a quantidade atual.
+2. Ajuste no campo ou use os botões +1/-1/+5.
+3. Toque em “SALVAR”.
+
+O que você deve ver (esperado):
+- Quantidade atualiza e fica salva.
+
+
+6.5 Bioimpedância (V5.2)
+Passo a passo:
+1. Na aba “Status”, procure “BIOIMPEDÂNCIA (V5.2)”.
+2. Cole um JSON com pelo menos o campo “date” (YYYY-MM-DD).
+3. Toque em “SALVAR NO NEON”.
+4. Toque no refresh para listar os últimos registros.
+
+O que você deve ver (esperado):
+- Mensagem “Bioimpedância salva no Neon.”
+- Lista com os últimos registros (data, peso, % gordura, etc.).
+
+
+6.6 Servidor (API URL)
+Para que serve:
+- Apontar o app para o servidor correto (Render), principalmente em troubleshooting.
+
+Passo a passo:
+1. Na aba “Status”, procure o card “SERVIDOR (API URL)”.
+2. Veja a URL atual.
+3. (Opcional) Cole uma nova URL e toque em “SALVAR”.
+4. Para voltar ao padrão, use “LIMPAR”.
+
+O que você deve ver (esperado):
+- A URL fica salva e o app passa a usar essa URL para as APIs.
+
+
+6.7 Lembrete dominical (PDF semanal)
+Para que serve:
+- Receber um lembrete no domingo com o PDF semanal.
+
+Passo a passo:
+1. Na aba “Status”, procure “LEMBRETE DOMINICAL — PDF SEMANAL”.
+2. Ative “HABILITAR”.
+3. Ajuste o horário.
+4. Use “ENVIAR TESTE” para validar (se disponível).
+
+Se não aparecer / não tocar:
+- Veja a seção 11 (permissões e economia de bateria).
+
+
+6.8 Strava (diagnóstico)
+Para que serve:
+- Validar se o servidor está configurado e se o app está conectado.
+
+O que você deve ver (esperado):
+- “STRAVA (DIAGNÓSTICO)” com:
+  - configured (servidor configurado)
+  - connected (app conectado)
+  - redirectUri (URL de retorno)
+  - lastSyncAt (última sync, quando existir)
+
+
+6.9 Biblioteca de Força (A/B/C) (V6.1+)
+Para que serve:
+- Cadastrar as fichas A/B/C com exercícios estruturados no servidor (Neon).
+- Usar “Treino A/B/C” no seu plano importado e o app expandir a ficha com os exercícios.
+
+O que você deve ver (esperado):
+- Card “BIBLIOTECA DE FORÇA (A/B/C)” com:
+  - Botões FICHA A / FICHA B / FICHA C
+  - Campo “ADICIONAR EXERCÍCIO (CATÁLOGO)” com busca/autocomplete
+  - Lista de exercícios com: séries, reps, descanso, RPE, carga, tempo, observações
+  - Botão “SALVAR FICHA NO NEON”
+
+Passo a passo (cadastrar uma ficha):
+1. Vá na aba “Status”.
+2. Role até “BIBLIOTECA DE FORÇA (A/B/C)”.
+3. Selecione A, B ou C.
+4. Dê um nome (ex.: “Inferiores”).
+5. Busque um exercício no catálogo e toque para adicionar.
+6. Ajuste séries/reps/descanso/RPE/carga/tempo.
+7. Toque em “SALVAR FICHA NO NEON”.
+
+Se o card não existir:
+- Atualize o app para a versão que inclua a Biblioteca de Força.
+- Confirme se o servidor foi atualizado/deployado.
+
+
+7) STRAVA — CONECTAR E SINCRONIZAR (USO DIÁRIO)
+
+7.1 Conectar
+- Ao abrir o app, ele tenta iniciar a conexão automaticamente.
+- Se não conectar, use o card do Strava e toque em “CONECTAR”.
+
+Passo a passo:
+1. Toque em “CONECTAR”.
+2. O app abre o navegador para autorizar.
+3. Conclua o login e aceite.
+4. Volte ao app e aguarde alguns segundos até aparecer “CONECTADO”.
+
+Se aparecer erro de redirect:
+- Isso é configuração do Strava no servidor (redirect_uri). Envie a mensagem do erro para suporte (sem tokens).
+
+
+7.2 Sincronizar
+1. Toque em “SINCRONIZAR”.
+2. Aguarde.
+
+O que você deve ver (esperado):
+- Mensagem de sucesso e/ou “importado X”.
+
+7.3 Tênis obrigatório em corridas (pós-Strava e check-in)
+Regra:
+- Corridas: o app exige escolher um tênis ao concluir/importar treino.
+- Bike/força: fica “Sem tênis” automaticamente.
+
+Quando acontece:
+1) Ao concluir uma corrida manualmente (“TREINO DO DIA”).
+2) Ao sincronizar o Strava, se chegar corrida nova sem tênis.
+
+Se o app pedir e você não tiver tênis:
+- Vá na aba “TÊNIS” (tela “EQUIPAMENTOS”) e cadastre pelo menos 1 tênis ativo.
+
+
+7.4 TÊNIS (EQUIPAMENTOS) — cadastrar e controlar km
+Para que serve:
+- Cadastrar seus tênis e acompanhar km acumulado até a meta (ex.: 500 km).
+
+Passo a passo (cadastrar):
+1. Abra a aba “TÊNIS”.
+2. Toque em “+ TÊNIS”.
+3. Preencha APELIDO (obrigatório) e, se quiser, marca/modelo.
+4. Ajuste “KM INICIAL” e “META (KM)”.
+5. Toque em “SALVAR”.
+
+O que você deve ver (esperado):
+- O tênis aparece em “ATIVOS” com barra de progresso (km atual / meta).
+
+Arquivar (aposentar):
+- No card do tênis, use “APOSENTAR” para mover para “ARQUIVADOS”.
+
+
+8) SPOTIFY — PLAYLIST DO TREINO
+
+Como funciona:
+- O card do Spotify sugere uma playlist baseada no tipo de treino do dia.
+- Não existe “login do usuário” no app: a busca é feita pelo servidor via credenciais do Spotify.
+
+Se não carregar:
+- Verifique se aparece uma mensagem de erro no card.
+- Em geral, isso indica que as credenciais do Spotify não estão configuradas no servidor.
+
+
+9) PRÓXIMO TREINO (TELA)
+
+Para que serve:
+- Ver o próximo treino do plano importado + clima do dia desse treino.
+
+Passo a passo:
+1. Abra a aba “Próximo”.
+2. Veja “PRÓXIMA SESSÃO” (data, atividade, pace/estrutura, km).
+3. Veja “CLIMA” (mín/máx, chuva, vento) para o dia do treino.
+4. Use o botão de “refresh” para atualizar.
+
+Se aparecer “Nenhum próximo treino encontrado”:
+- Importe o plano na aba Status.
+
+
+10) TELEGRAM — ALERTAS E BRIEFING NOTURNO
+
+O Telegram é usado para alertas automáticos (quando configurado no servidor).
+Exemplos:
+- Estoque de géis zerou → alerta imediato.
+- Briefing do próximo treino às 22h → mensagem com o treino e clima (se o agendamento/cron estiver ativo no servidor).
+
+Se você não recebeu nada:
+- Pode não haver rotina/cron configurada.
+- Pode faltar configuração do chat/token no servidor.
+
+
+11) ANDROID — PERMISSÕES IMPORTANTES (NOTIFICAÇÃO)
+
+11.1 Permitir notificações
+1. Android: Ajustes do sistema → Apps → ProCoach OS → Notificações → Permitir.
+
+11.2 Economia de bateria (recomendado)
+Se você quer notificações confiáveis:
+1. Ajustes → Bateria → Economia de bateria
+2. Excluir o ProCoach OS de otimizações (varia por fabricante)
+
+Se não fizer isso:
+- Alguns Android “matam” o app em segundo plano e notificações atrasam.
+
+
+12) PROBLEMAS COMUNS (RESOLUÇÃO RÁPIDA)
+
+12.1 “Concluí o treino e voltou em aberto”
+Checklist:
+- Feche e abra o app.
+- Confirme data/hora do celular.
+- Conclua novamente e faça o Debrief.
+
+12.2 “Plano de hoje não aparece”
+Checklist:
+- Aba Status → “VERIFICAR PLANO IMPORTADO” (tem lista?)
+- Se tem lista, mas hoje não aparece: talvez hoje não exista entrada para a data de hoje.
+- Aba Plano → mude para “IMPORTADO” e confira se o período importado inclui hoje.
+
+12.3 “Erro 404 ao importar plano/bioimpedância”
+Checklist:
+- Confirme que você está usando a versão V6.1 ou superior do app.
+- Confirme que o app aponta para o servidor correto (EXPO_PUBLIC_API_URL).
+- Se persistir, copie a mensagem do erro e envie para suporte (sem segredos).
+
+12.4 “Strava não conecta/sincroniza”
+Checklist:
+- Confirme se o servidor está configurado (STRAVA_CLIENT_ID/SECRET e redirect_uri correto).
+- Tente “CONECTAR” novamente e aguarde voltar para “CONECTADO”.
+- Tente “SINCRONIZAR” e veja se importou atividades.
+
+12.5 “Spotify não funciona”
+Checklist:
+- Se o card mostrar erro 503/“não configurado”, falta configurar SPOTIFY_CLIENT_ID/SECRET no servidor.
+- Se aparecer 502 (Bad Gateway), o servidor pode estar instável ou a rota do Spotify está demorando; aguarde e tente novamente.
+
+12.6 “Não recebo mensagens do Telegram”
+Checklist:
+- Verifique permissões de notificação no Android (se aplicável).
+- O envio das 22h depende de um agendamento externo (GitHub Actions).
+  - No GitHub do projeto, configure o Secret `TELEGRAM_CRON_SECRET`.
+  - Garanta que o servidor tenha `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` e `TELEGRAM_CRON_SECRET`.
+  - Rode manualmente o workflow “Telegram Nightly Briefing” (workflow_dispatch) para testar.
+  - (Opcional) No servidor, consulte `/api/telegram/diagnostics` para verificar se as variáveis estão setadas.
+
+12.7 “Biblioteca de Força não carrega / não salva”
+Checklist:
+- Confirme se o servidor está respondendo (API URL correto na aba Status).
+- Se o catálogo não retornar resultados: tente buscar com 2+ letras e aguarde.
+- Se salvar falhar:
+  - verifique se o servidor foi atualizado/deployado com a versão que inclui a Biblioteca de Força
+  - tente novamente após reiniciar o app
+  - se persistir, copie a mensagem do erro (sem segredos) para suporte
+
+
+13) SEGURANÇA (MUITO IMPORTANTE)
+
+- Não compartilhe tokens, client secret, URLs de banco ou credenciais em mensagens.
+- Se você já compartilhou algum segredo, trate como comprometido e faça rotação.
+
+
+14) PARA DESENVOLVIMENTO — “IGUALAR” COMPUTADOR COM O GITHUB (PROMPT/ROTINA)
+
+Objetivo:
+- Garantir que o código na sua IDE esteja sincronizado com o repositório do GitHub (sem divergência).
+
+Rotina recomendada (sempre antes de mexer no projeto):
+1) Abra o terminal na pasta do projeto
+2) Rode:
+   - `git status`
+   - `git fetch --all --prune`
+   - `git pull --rebase`
+3) Se houver conflitos:
+   - resolva, rode `git status` até ficar limpo
+   - finalize com `git add .` + `git rebase --continue`
+4) Antes de subir mudanças:
+   - `git status` (confirme arquivos corretos)
+   - `git push`
+
+Prompt pronto para usar na IDE (copie e cole):
+“Verifique meu repositório local e deixe ele IGUAL ao GitHub. Passos: rode git status, depois git fetch --all --prune, depois git pull --rebase. Se houver conflitos, me guie para resolver. No final, confirme que não há alterações pendentes e que o branch local está alinhado ao remoto.”

@@ -1,0 +1,18 @@
+{
+  "name": "workspace",
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.1.0",
+  "license": "MIT",
+  "scripts": {
+    "preinstall": "node -e \"const fs = require('fs'); ['package-lock.json', 'yarn.lock'].forEach(f => fs.existsSync(f) && fs.unlinkSync(f)); const ua = process.env.npm_config_user_agent || ''; const execPath = (process.env.npm_execpath || '').toLowerCase(); const isPnpm = ua.startsWith('pnpm/') || execPath.includes('pnpm'); if (!isPnpm) { console.error('ERROR: Use pnpm instead of npm/yarn'); process.exit(1); }\"",
+    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "start": "pnpm --filter @workspace/api-server start",
+    "typecheck:libs": "tsc --build",
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+  },
+  "private": true,
+  "devDependencies": {
+    "typescript": "~5.9.2",
+    "prettier": "^3.8.1"
+  }
+}
