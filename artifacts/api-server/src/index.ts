@@ -35,18 +35,16 @@ const currentDir = path.dirname(currentFilePath);
 await loadEnvFiles([
   path.resolve(currentDir, "../.env"),
   path.resolve(currentDir, "../../.env"),
+  path.resolve(currentDir, "../../../.env"),
 ]);
 
 const { default: app } = await import("./app");
 const { logger } = await import("./lib/logger");
+const { stravaWebhookRouter } = await import("./routes/stravaWebhook");
 
-const rawPort = process.env["PORT"];
+app.use('/api', stravaWebhookRouter);
 
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
+const rawPort = process.env["PORT"] || "3000";
 
 const port = Number(rawPort);
 
@@ -80,3 +78,5 @@ app.listen(port, (err) => {
     })();
   }
 });
+
+export {};

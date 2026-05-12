@@ -335,6 +335,83 @@ router.get("/procoach/me/workouts", async (req: Request, res: Response) => {
   res.json({ entries, totalCount });
 });
 
+// ─── Spotify (Integração Futura) ──────────────────────────────────────────────
+
+router.get("/procoach/me/spotify-recommendation", async (req: Request, res: Response) => {
+  await ensurePlanTable();
+  const athleteId = await getOrCreateMonoAthleteId();
+  const today = getSaoPauloDayKey();
+
+  const rows = await db.execute(sql`
+    SELECT activity, structure FROM procoach_plan_sessions
+    WHERE athlete_id = ${athleteId} AND session_date = ${today} LIMIT 1
+  `) as { rows: Array<any> };
+
+  const session = rows.rows[0];
+  let searchKeyword = "running motivation"; // Padrão
+
+  if (session) {
+    const act = String(session.activity).toLowerCase();
+    if (act.includes("corrida") || act.includes("longão") || act.includes("fartlek")) searchKeyword = "running pace bpm";
+    else if (act.includes("bike") || act.includes("ciclismo")) searchKeyword = "cycling workout tempo";
+    else if (act.includes("musc") || act.includes("força")) searchKeyword = "gym workout heavy";
+    else if (act.includes("descanso") || act.includes("regenerativo")) searchKeyword = "chill relaxing recovery";
+  }
+
+  // TODO: Implementar chamada real à API do Spotify usando Client Credentials
+
+  res.json({
+    keyword: searchKeyword,
+    playlist: {
+      name: `ProCoach OS: ${session ? session.activity : 'Treino'}`,
+      uri: "spotify:playlist:37i9dQZF1DX76Wlfdnj7AP", // URI real da playlist "Running" do Spotify
+      url: "https://open.spotify.com/playlist/37i9dQZF1DX76Wlfdnj7AP"
+    }
+  });
+});
+
+// ─── Strava Webhooks ──────────────────────────────────────────────────────────
+
+router.get("/procoach/webhook/strava", (req: Request, res: Response) => {
+  // Este token é inventado por si e será colocado no painel do Strava
+  const VERIFY_TOKEN = process.env.STRAVA_VERIFY_TOKEN || "COACH_PRO_STRAVA_SECRET";
+
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+
+  if (mode && token) {
+    if (mode === "subscribe" && token === VERIFY_TOKEN) {
+      console.log("✅ Strava Webhook verificado com sucesso!");
+      // O Strava exige que o JSON devolva exatamente o challenge que eles enviaram
+      res.json({ "hub.challenge": challenge });
+    } else {
+      res.sendStatus(403);
+    }
+  } else {
+    res.sendStatus(400);
+  }
+});
+
+router.post("/procoach/webhook/strava", async (req: Request, res: Response) => {
+  // 1. O Strava exige resposta imediata com status 200 para não bloquear a fila de eventos
+  res.status(200).send("EVENT_RECEIVED");
+
+  const body = req.body as any;
+  console.log("🔔 Evento do Strava Recebido:", body);
+
+  // 2. Filtramos apenas para quando o atleta termina (cria) uma atividade nova
+  if (body.object_type === "activity" && body.aspect_type === "create") {
+    const activityId = body.object_id;
+    
+    await sendTelegram(
+      `🏃 *Novo Treino Detectado no Strava!*\n\n` +
+      `*Atividade ID:* \`${activityId}\`\n\n` +
+      `_(Fase 1 Completa: O nosso servidor já sabe que você acabou de correr!)_`
+    );
+  }
+});
+
 // ─── Shoes (Equipamentos) ─────────────────────────────────────────────────────
 
 router.get("/procoach/me/shoes", async (_req: Request, res: Response) => {

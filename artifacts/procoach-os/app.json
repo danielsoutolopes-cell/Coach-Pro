@@ -1,17 +1,16 @@
 {
   "expo": {
-    "name": "PROCOACH OS V6.1",
-    "slug": "procoach-os",
-    "version": "1.1.1",
+    "name": "Coach Pro",
+    "slug": "Coach-Pro",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "procoach-os",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0A0A0A"
+      "backgroundColor": "#0A0A0A" 
     },
     "ios": {
       "supportsTablet": false
