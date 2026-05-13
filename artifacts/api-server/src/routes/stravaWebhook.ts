@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db, eq, and } from '@workspace/db';
 import { workoutEntriesTable, weeklyStatsTable, athletesTable } from '@workspace/db/schema';
 import { getOrCreateMonoAthleteId } from './migrations';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const stravaWebhookRouter = Router();
 
@@ -74,16 +75,17 @@ async function sendTelegram(text: string): Promise<void> {
 async function generateWithGemini(prompt: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return "IA não configurada.";
-  const model = process.env.GEMINI_MODEL ?? "gemini-1.5-flash";
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }] })
-  });
-  if (!res.ok) return "Excelente treino! (Erro ao contatar a IA).";
-  const json = await res.json() as any;
-  return json.candidates?.[0]?.content?.parts?.[0]?.text ?? "Muito bem!";
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const modelName = process.env.GEMINI_MODEL ?? "gemini-1.5-flash";
+    const model = genAI.getGenerativeModel({ model: modelName });
+    const result = await model.generateContent(prompt);
+    return result.response.text();
+  } catch (err) {
+    console.error("Erro na chamada do Gemini via SDK:", err);
+    return "Excelente treino! (Erro ao contatar a IA).";
+  }
 }
 
 /**

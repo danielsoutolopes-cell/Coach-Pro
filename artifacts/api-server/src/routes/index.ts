@@ -6,6 +6,7 @@ import stravaRouter from "./strava";
 import telegramRouter from "./telegram";
 import aiWorkoutRouter from "./ai-workout";
 import spotifyRouter from "./spotify";
+import { athletesRouter } from "./athletes";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(telegramRouter);
 router.use(procoachRouter);
 router.use(aiWorkoutRouter);
 router.use(spotifyRouter);
+router.use("/procoach/athletes", athletesRouter);
 
 export default router;

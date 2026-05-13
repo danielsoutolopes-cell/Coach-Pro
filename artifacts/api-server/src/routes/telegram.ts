@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, desc, sql } from "@workspace/db";
 import { db } from "@workspace/db";
 import { athletesTable, workoutEntriesTable, weeklyStatsTable } from "@workspace/db/schema";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const router: IRouter = Router();
 
@@ -218,30 +219,19 @@ async function ensurePlanTable(): Promise<void> {
   planTableReady = true;
 }
 
-// ─── Groq AI intent classification ────────────────────────────────────────────
+// ─── Gemini AI intent classification ────────────────────────────────────────────
 async function classifyIntent(text: string): Promise<string> {
-  const key = process.env.GROQ_API_KEY;
+  const key = process.env.GEMINI_API_KEY;
   if (!key) return "UNKNOWN";
+
   try {
-    const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: "llama3-8b-8192",
-        messages: [
-          {
-            role: "system",
-            content: `Classifica a mensagem do utilizador em UMA dessas categorias: MENU | CONSULTA | FIM | LARGADA | CHEGADA | BIOMETRIA | TELEMETRIA | PLANOHOJE | COMPLIANCE | UNKNOWN. Responde APENAS com a categoria em maiúsculas, sem explicação.`,
-          },
-          { role: "user", content: text },
-        ],
-        temperature: 0,
-        max_tokens: 8,
-      }),
-    });
-    const j = await r.json() as { choices: Array<{ message: { content: string } }> };
-    return j.choices?.[0]?.message?.content?.trim().toUpperCase() ?? "UNKNOWN";
-  } catch {
+    const genAI = new GoogleGenerativeAI(key);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const prompt = `Classifica a mensagem do utilizador em UMA dessas categorias: MENU | CONSULTA | FIM | LARGADA | CHEGADA | BIOMETRIA | TELEMETRIA | PLANOHOJE | COMPLIANCE | UNKNOWN. Responde APENAS com a categoria em maiúsculas, sem explicação.\n\nMensagem do usuário: "${text}"`;
+    const result = await model.generateContent(prompt);
+    return result.response.text().trim().toUpperCase();
+  } catch (err) {
+    console.error("Erro ao classificar intent no Gemini:", err);
     return "UNKNOWN";
   }
 }

@@ -1,27 +1,19 @@
-// Patch fs.watch BEFORE metro loads to silently handle ENOENT errors from
-// pnpm postinstall temporary directories (e.g. expo-notifications_tmp_XXXX,
-// twilio_tmp_XXXX). These dirs are created during `pnpm add` and removed
-// immediately after, but Metro's FallbackWatcher still tries to watch their
-// subdirectories and crashes with ENOENT.
-const fs = require("fs");
-const EventEmitter = require("events");
-const _origWatch = fs.watch;
-fs.watch = function patchedWatch(p, options, listener) {
-  try {
-    return _origWatch.call(fs, p, options, listener);
-  } catch (err) {
-    if (err && err.code === "ENOENT") {
-      // Return a no-op watcher so Metro can continue without crashing
-      const noop = new EventEmitter();
-      noop.close = () => {};
-      return noop;
-    }
-    throw err;
-  }
-};
+const { getDefaultConfig } = require('expo/metro-config');
+const path = require('path');
 
-const { getDefaultConfig } = require("expo/metro-config");
+// Encontra a raiz do aplicativo e a raiz do monorepo
+const projectRoot = __dirname;
+const workspaceRoot = path.resolve(projectRoot, '../..');
 
-const config = getDefaultConfig(__dirname);
+const config = getDefaultConfig(projectRoot);
+
+// 1. Observa todos os arquivos na raiz do monorepo
+config.watchFolders = [workspaceRoot];
+
+// 2. Diz ao Metro onde procurar os pacotes importados (node_modules)
+config.resolver.nodeModulesPaths = [
+  path.resolve(projectRoot, 'node_modules'),
+  path.resolve(workspaceRoot, 'node_modules'),
+];
 
 module.exports = config;
