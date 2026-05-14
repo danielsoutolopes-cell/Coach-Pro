@@ -281,3 +281,51 @@ athletesRouter.get('/:id/compliance/week', async (req: Request, res: Response) =
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
+// 8. GET /workouts/next - Retorna o próximo treino planejado (amanhã em diante)
+athletesRouter.get('/:id/workouts/next', async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+
+    const rows = await db.execute(sql`
+      SELECT session_date, activity, pace_target, structure, planned_km
+      FROM procoach_plan_sessions
+      WHERE athlete_id = ${id} AND session_date > ${today}
+      ORDER BY session_date ASC
+      LIMIT 1
+    `) as { rows: any[] };
+
+    const s = rows.rows[0];
+    if (!s) {
+      res.status(404).json(null);
+      return;
+    }
+
+    res.json({
+      id: s.session_date,
+      date: s.session_date,
+      activity: s.activity,
+      pace_alvo: s.pace_target,
+      distancia_km: s.planned_km,
+      estrutura: s.structure,
+      status: 'open',
+      shoe_id: null
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// 9. POST /workouts/feedback - Recebe RPE e Dor (Debrief)
+athletesRouter.post('/:id/workouts/feedback', async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const { rpe, painLevel } = req.body;
+    // Salva a dor articular na telemetria do Atleta (Radar Articular)
+    await db.execute(sql`UPDATE procoach_athletes SET pain_level = ${painLevel} WHERE id = ${id}`);
+    res.json({ success: true, message: 'Feedback salvo com sucesso' });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:procoach_os/features/athlete/providers/athlete_provider.dart';
 import 'package:procoach_os/features/dashboard/widgets/weather_card.dart';
 import 'package:procoach_os/features/dashboard/widgets/workout_card.dart';
+import 'package:procoach_os/features/dashboard/widgets/spotify_card.dart';
 import 'package:procoach_os/shared/models/athlete.dart';
 import 'package:procoach_os/shared/widgets/async_value_widget.dart';
 
@@ -69,6 +70,10 @@ class DashboardScreen extends ConsumerWidget {
                 
                 // Treino do Dia
                 const WorkoutCard(),
+                const SizedBox(height: 16),
+                
+                // Spotify
+                const SpotifyCard(),
               ],
             ),
           );
