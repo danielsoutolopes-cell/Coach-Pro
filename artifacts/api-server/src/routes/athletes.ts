@@ -2,6 +2,8 @@ import { Router, type Request, type Response } from 'express';
 import { db, eq, sql } from '@workspace/db';
 import { athletesTable } from '@workspace/db/schema';
 import multer from 'multer';
+import fs from 'fs';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const athletesRouter = Router();
 
@@ -106,7 +108,7 @@ athletesRouter.get('/:id/bioimpedance/latest', async (req: Request, res: Respons
       FROM procoach_bioimpedance
       WHERE athlete_id = ${id}
       ORDER BY entry_date DESC
-      LIMIT 1
+      LIMIT 2
     `) as { rows: any[] };
     
     const b = rows.rows[0];
@@ -115,10 +117,30 @@ athletesRouter.get('/:id/bioimpedance/latest', async (req: Request, res: Respons
       return;
     }
 
+    const previous = rows.rows[1];
+    let body_fat_diff = null;
+    let weight_diff = null;
+    let muscle_mass_diff = null;
+    
+    if (previous) {
+      if (b.body_fat_pct !== null && previous.body_fat_pct !== null) {
+        body_fat_diff = Number((Number(b.body_fat_pct) - Number(previous.body_fat_pct)).toFixed(2));
+      }
+      if (b.weight_kg !== null && previous.weight_kg !== null) {
+        weight_diff = Number((Number(b.weight_kg) - Number(previous.weight_kg)).toFixed(2));
+      }
+      if (b.muscle_mass_kg !== null && previous.muscle_mass_kg !== null) {
+        muscle_mass_diff = Number((Number(b.muscle_mass_kg) - Number(previous.muscle_mass_kg)).toFixed(2));
+      }
+    }
+
     res.json({
       weight_kg: Number(b.weight_kg),
       body_fat_pct: Number(b.body_fat_pct),
-      muscle_mass_kg: Number(b.muscle_mass_kg)
+      muscle_mass_kg: Number(b.muscle_mass_kg),
+      body_fat_diff: body_fat_diff,
+      weight_diff: weight_diff,
+      muscle_mass_diff: muscle_mass_diff
     });
   } catch (err) {
     res.status(500).json({ error: 'Internal Server Error' });
@@ -136,11 +158,72 @@ athletesRouter.post('/:id/bioimpedance/upload', upload.single('file'), async (re
 
     console.log(`📄 Recebido PDF do atleta ${id}: ${req.file.originalname}`);
     
-    // TODO: Enviar o caminho (req.file.path) para a API de Vision do Gemini
-    // Extrair o JSON e inserir na tabela `procoach_bioimpedance`.
+    const fileBytes = fs.readFileSync(req.file.path);
+    const base64Data = fileBytes.toString('base64');
+
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const prompt = `Você é um especialista em nutrição e leitura de exames.
+Analise o PDF de bioimpedância em anexo e extraia exatamente as seguintes métricas num JSON válido:
+{
+  "date": "YYYY-MM-DD",
+  "weight_kg": numero,
+  "body_fat_pct": numero,
+  "muscle_mass_kg": numero,
+  "body_water_pct": numero,
+  "visceral_fat": numero,
+  "metabolic_age": numero,
+  "tmb_kcal": numero,
+  "protein_pct": numero,
+  "bone_mass_kg": numero
+}
+Caso alguma métrica não exista no documento, retorne null no valor. Responda apenas com o JSON bruto, sem marcação markdown ou blocos de código.`;
+
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType: 'application/pdf'
+        }
+      }
+    ]);
+
+    // Apaga o PDF temporário após enviar ao Gemini
+    try { fs.unlinkSync(req.file.path); } catch {}
+
+    const rawText = result.response.text();
+    const cleaned = rawText.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
+    const data = JSON.parse(cleaned);
+
+    const entryDate = data.date || new Date().toISOString().slice(0, 10);
+
+    await db.execute(sql`
+      INSERT INTO procoach_bioimpedance
+        (athlete_id, entry_date, weight_kg, body_fat_pct, muscle_mass_kg, body_water_pct, visceral_fat, metabolic_age, tmb_kcal, protein_pct, bone_mass_kg, created_at, updated_at)
+      VALUES
+        (${id}, ${entryDate}, ${data.weight_kg ?? null}, ${data.body_fat_pct ?? null}, ${data.muscle_mass_kg ?? null}, ${data.body_water_pct ?? null}, ${data.visceral_fat ?? null}, ${data.metabolic_age ?? null}, ${data.tmb_kcal ?? null}, ${data.protein_pct ?? null}, ${data.bone_mass_kg ?? null}, NOW(), NOW())
+      ON CONFLICT (athlete_id, entry_date)
+      DO UPDATE SET
+        weight_kg = EXCLUDED.weight_kg,
+        body_fat_pct = EXCLUDED.body_fat_pct,
+        muscle_mass_kg = EXCLUDED.muscle_mass_kg,
+        body_water_pct = EXCLUDED.body_water_pct,
+        visceral_fat = EXCLUDED.visceral_fat,
+        metabolic_age = EXCLUDED.metabolic_age,
+        tmb_kcal = EXCLUDED.tmb_kcal,
+        protein_pct = EXCLUDED.protein_pct,
+        bone_mass_kg = EXCLUDED.bone_mass_kg,
+        updated_at = NOW()
+    `);
     
-    res.json({ success: true, message: 'Upload concluído e em processamento.' });
+    res.json({ success: true, message: 'Upload concluído e bioimpedância salva.', data });
   } catch (err) {
+    console.error('[API] Erro ao processar PDF com IA:', err);
+    if (req.file?.path) {
+      try { fs.unlinkSync(req.file.path); } catch {}
+    }
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });

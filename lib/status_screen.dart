@@ -172,9 +172,9 @@ class StatusScreen extends ConsumerWidget {
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildBioItem('⚖️', bio.weightKg.toString(), 'kg'),
-                  _buildBioItem('🔥', bio.bodyFatPct.toString(), '% Gordura'),
-                  _buildBioItem('💪', bio.muscleMassKg.toString(), 'kg Músculo'),
+                  _buildBioItem('⚖️', bio.weightKg.toString(), 'kg', diff: bio.weightDiff),
+                  _buildBioItem('🔥', bio.bodyFatPct.toString(), '% Gordura', diff: bio.bodyFatDiff),
+                  _buildBioItem('💪', bio.muscleMassKg.toString(), 'kg Músculo', diff: bio.muscleMassDiff, invertColors: true),
                 ],
               );
             },
@@ -232,12 +232,25 @@ class StatusScreen extends ConsumerWidget {
     }
   }
 
-  Widget _buildBioItem(String emoji, String value, String label) {
+  Widget _buildBioItem(String emoji, String value, String label, {double? diff, bool invertColors = false}) {
     return Column(
       children: [
         Text(emoji, style: const TextStyle(fontSize: 24)),
         const SizedBox(height: 8),
-        Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+            if (diff != null && diff != 0) ...[
+              const SizedBox(width: 4),
+              Icon(
+                diff > 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                color: invertColors ? (diff > 0 ? Colors.green : Colors.redAccent) : (diff > 0 ? Colors.redAccent : Colors.green),
+                size: 16,
+              ),
+            ]
+          ],
+        ),
         const SizedBox(height: 4),
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
       ],
