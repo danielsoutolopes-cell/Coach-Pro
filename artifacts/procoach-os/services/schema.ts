@@ -16,7 +16,7 @@ export interface Race {
 
 export interface AthleteProfile extends Athlete {
   races?: Race[];
-  macrocycleRaceId?: string | null;
+  macrocycleRaceId: string | null;
 }
 
 // Re-exporta os tipos inferidos do schema do Drizzle do pacote compartilhado `lib/db`.
