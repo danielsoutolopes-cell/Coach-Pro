@@ -3,6 +3,18 @@ import { db, eq, and } from '@workspace/db';
 import { workoutEntriesTable, weeklyStatsTable, athletesTable } from '@workspace/db/schema';
 import { getOrCreateMonoAthleteId } from './migrations';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import * as admin from 'firebase-admin';
+
+// Inicializa o Firebase Admin SDK
+if (!admin.apps.length) {
+  try {
+    admin.initializeApp({
+      credential: admin.credential.applicationDefault(),
+    });
+  } catch (error) {
+    console.error('Firebase Admin init falhou:', error);
+  }
+}
 
 export const stravaWebhookRouter = Router();
 
@@ -82,29 +94,24 @@ async function generateWithGemini(prompt: string): Promise<string> {
     const model = genAI.getGenerativeModel({ model: modelName });
     const result = await model.generateContent(prompt);
     return result.response.text();
-  } catch (err) {
-    console.error("Erro na chamada do Gemini via SDK:", err);
+  } catch (err: any) {
+    console.error("Erro detalhado da API da IA (Gemini):", err?.response?.data || err?.message || err);
     return "Excelente treino! (Erro ao contatar a IA).";
   }
 }
 
 /**
- * Função auxiliar para enviar notificação Push via Expo.
+ * Função auxiliar para enviar notificação Push via Firebase (FCM).
  */
-async function sendExpoPushNotification(expoPushToken: string, title: string, body: string) {
-  if (!expoPushToken) return;
+async function sendFirebasePushNotification(fcmToken: string, title: string, body: string) {
+  if (!fcmToken) return;
   try {
-    await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Accept-encoding': 'gzip, deflate',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ to: expoPushToken, sound: 'default', title, body }),
+    await admin.messaging().send({
+      token: fcmToken,
+      notification: { title, body }
     });
   } catch (err) {
-    console.error('Erro ao enviar notificação Push do Expo:', err);
+    console.error('Erro ao enviar notificação Push do Firebase:', err);
   }
 }
 
@@ -201,7 +208,8 @@ async function processStravaActivity(athleteId: number, activityId: number) {
 
         // 3.3 Dispara a notificação Push caso seja uma corrida (exigência de tênis)
         if (procoachType === 'corrida' && athlete.expoPushToken) {
-          void sendExpoPushNotification(
+          // Mantemos a coluna expoPushToken no banco, mas salvamos o FCM Token do Flutter nela
+          void sendFirebasePushNotification(
             athlete.expoPushToken,
             '🏃 Novo treino salvo!',
             `Seu treino "${activityData.name}" chegou do Strava. Qual tênis você usou hoje?`

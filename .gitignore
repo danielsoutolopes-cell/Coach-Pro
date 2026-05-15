@@ -52,8 +52,20 @@ Thumbs.db
 .env
 .env.*
 
+# Firebase
+lib/firebase_options.dart
+android/app/google-services.json
+
+# Flutter / Dart
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+
 # Temp files
 _tmp_*
+
+# Non-project artifacts
 
 # Non-project artifacts
 attached_assets/*.dart
