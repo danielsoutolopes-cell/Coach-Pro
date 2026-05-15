@@ -85,13 +85,17 @@ athletesRouter.patch('/me/gels', async (req: Request, res: Response) => {
 // 3. GET /shoes - Retorna a Rotação de Tênis
 athletesRouter.get('/me/shoes', async (req: Request, res: Response) => {
   try {
-    // TODO: Criar a tabela `procoach_shoes`. Por enquanto, enviamos o Mock 
-    // para o app não quebrar e mostrar algo na tela.
-    res.json([
-      { id: '1', nickname: 'Novablast 3', brand: 'Asics', initial_km: 450, target_km: 600, is_active: true },
-      { id: '2', nickname: 'Vaporfly 2', brand: 'Nike', initial_km: 350, target_km: 400, is_active: true }
-    ]);
+    const id = await getOrCreateMonoAthleteId();
+    const rows = await db.execute(sql`
+      SELECT id, nickname, brand, initial_km, target_km, is_active
+      FROM procoach_shoes
+      WHERE athlete_id = ${id} AND is_active = true
+      ORDER BY created_at DESC
+    `) as { rows: any[] };
+    
+    res.json(rows.rows.map(r => ({ ...r, id: r.id.toString() })));
   } catch (err) {
+    console.error('[API] Erro ao buscar tênis:', err);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -378,6 +382,70 @@ athletesRouter.patch('/me/push-token', async (req: Request, res: Response) => {
     res.json({ success: true, message: 'FCM Token salvo com sucesso' });
   } catch (err) {
     console.error('[API] Erro ao salvar FCM Token:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// 12. GET /strength-routines - Busca as fichas de força (A/B/C)
+athletesRouter.get('/me/strength-routines', async (req: Request, res: Response) => {
+  try {
+    const id = await getOrCreateMonoAthleteId();
+    const rows = await db.execute(sql`
+      SELECT routine_type, name, exercises
+      FROM procoach_strength_routines
+      WHERE athlete_id = ${id}
+      ORDER BY routine_type ASC
+    `) as { rows: any[] };
+    
+    res.json(rows.rows);
+  } catch (err) {
+    console.error('[API] Erro ao buscar fichas de força:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// 13. POST /strength-routine - Salva ou atualiza uma ficha (A, B ou C)
+athletesRouter.post('/me/strength-routine', async (req: Request, res: Response) => {
+  try {
+    const id = await getOrCreateMonoAthleteId();
+    const { routineType, name, exercises } = req.body;
+
+    if (!routineType || !name || !exercises) {
+      res.status(400).json({ error: 'Faltam campos obrigatórios (routineType, name, exercises)' });
+      return;
+    }
+
+    await db.execute(sql`
+      INSERT INTO procoach_strength_routines (athlete_id, routine_type, name, exercises, updated_at)
+      VALUES (${id}, ${routineType}, ${name}, ${JSON.stringify(exercises)}::jsonb, NOW())
+      ON CONFLICT (athlete_id, routine_type)
+      DO UPDATE SET
+        name = EXCLUDED.name,
+        exercises = EXCLUDED.exercises,
+        updated_at = NOW()
+    `);
+    
+    res.json({ success: true, message: 'Ficha salva com sucesso!' });
+  } catch (err) {
+    console.error('[API] Erro ao salvar ficha de força:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// 14. GET /plan-sessions - Busca todos os treinos planejados
+athletesRouter.get('/me/plan-sessions', async (req: Request, res: Response) => {
+  try {
+    const id = await getOrCreateMonoAthleteId();
+    const rows = await db.execute(sql`
+      SELECT session_date, activity, pace_target, structure, planned_km
+      FROM procoach_plan_sessions
+      WHERE athlete_id = ${id}
+      ORDER BY session_date ASC
+    `) as { rows: any[] };
+    
+    res.json(rows.rows);
+  } catch (err) {
+    console.error('[API] Erro ao buscar matriz de treinos:', err);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
