@@ -6,7 +6,7 @@ import 'package:procoach_os/shared/widgets/procoach_button.dart';
 import 'package:procoach_os/features/dashboard/providers/race_strategy_provider.dart';
 
 class RaceDayCard extends ConsumerWidget {
-  final Race race;
+  final dynamic race;
   final int daysToRace;
   final int currentWeek;
   final bool isRaceDayMode;

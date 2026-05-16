@@ -38,14 +38,55 @@ class WorkoutCard extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(workout?.type?.toUpperCase() ?? 'TREINO', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text(workout?.activity.toUpperCase() ?? 'TREINO', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    Text('🎯 Pace: ${workout?.pace ?? "--:--"}  •  📏 ${workout?.distance ?? 0}km', style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                    Text('🎯 Pace: ${workout?.targetPace ?? "--:--"}  •  📏 ${workout?.distanceKm ?? 0}km', style: const TextStyle(color: Colors.grey, fontSize: 14)),
                   ],
                 ),
               ),
             ],
           ),
+          
+          // Segmentação Visual do Treino (Fase 1)
+          if (workout?.estrutura != null && workout!.estrutura!.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: workout.estrutura!.split('+').map((segment) {
+                final text = segment.trim();
+                if (text.isEmpty) return const SizedBox.shrink();
+                
+                final isWarmup = text.toUpperCase().contains('AQ');
+                final isCooldown = text.toUpperCase().contains('DQ');
+                
+                Color bgColor;
+                Color textColor;
+                Color borderColor;
+                
+                if (isWarmup) {
+                  bgColor = Colors.blueAccent.withOpacity(0.15);
+                  textColor = Colors.lightBlueAccent;
+                  borderColor = Colors.blueAccent.withOpacity(0.5);
+                } else if (isCooldown) {
+                  bgColor = Colors.teal.withOpacity(0.15);
+                  textColor = Colors.tealAccent;
+                  borderColor = Colors.teal.withOpacity(0.5);
+                } else {
+                  bgColor = Colors.deepOrangeAccent.withOpacity(0.15);
+                  textColor = Colors.deepOrangeAccent;
+                  borderColor = Colors.deepOrangeAccent.withOpacity(0.5);
+                }
+
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8), border: Border.all(color: borderColor)),
+                  child: Text(text, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                );
+              }).toList(),
+            ),
+          ],
+          
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
@@ -65,7 +106,7 @@ class WorkoutCard extends ConsumerWidget {
                         barrierDismissible: false,
                         builder: (ctx) => DebriefDialog(
                           workoutId: workout.id.toString(),
-                          distanceKm: workout.type == 'corrida' ? (workout.distance as num).toDouble() : 0.0,
+                          distanceKm: workout.activity.toLowerCase() == 'corrida' ? (workout.distanceKm ?? 0).toDouble() : 0.0,
                         ),
                       );
                       

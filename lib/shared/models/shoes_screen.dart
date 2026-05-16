@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:procoach_os/features/equipment/providers/shoe_provider.dart';
+import 'package:procoach_os/features/inventory/providers/shoe_provider.dart';
 import 'package:procoach_os/features/athlete/providers/athlete_provider.dart';
 import 'package:procoach_os/shared/models/shoe.dart';
 
