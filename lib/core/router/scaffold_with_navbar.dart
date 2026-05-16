@@ -48,7 +48,7 @@ class ScaffoldWithNavBar extends StatelessWidget {
             label: 'Próximo',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.inventory_2_outlined),
+            icon: Icon(Icons.directions_run),
             label: 'Equipamento',
           ),
         ],

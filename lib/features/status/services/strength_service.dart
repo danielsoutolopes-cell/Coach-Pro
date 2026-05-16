@@ -11,18 +11,23 @@ class StrengthService {
   Future<List<StrengthRoutine>> getStrengthRoutines() async {
     try {
       final response = await _dio.get('/athletes/me/strength-routines');
-      final data = response.data as List;
-      return data.map((e) => StrengthRoutine.fromJson(e)).toList();
+      if (response.data == null) return [];
+      final data = response.data as List<dynamic>;
+      return data.map((e) => StrengthRoutine.fromJson(e as Map<String, dynamic>)).toList();
     } catch (e) {
       throw Exception('Erro ao buscar fichas de força: $e');
     }
   }
 
   Future<void> saveStrengthRoutine(StrengthRoutine routine) async {
-    await _dio.post(
-      '/athletes/me/strength-routine',
-      data: routine.toJson(),
-    );
+    try {
+      await _dio.post(
+        '/athletes/me/strength-routines', // Uso no plural mantendo a padronização REST
+        data: routine.toJson(),
+      );
+    } catch (e) {
+      throw Exception('Erro ao salvar ficha de força: $e');
+    }
   }
 }
 

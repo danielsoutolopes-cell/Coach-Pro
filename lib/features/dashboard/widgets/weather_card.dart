@@ -9,9 +9,8 @@ class WeatherCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Passando a data para o Provider! 
-    // (Veja a Nota de Arquiteto abaixo sobre como atualizar o arquivo weather_provider.dart)
-    final weatherAsync = ref.watch(weatherProvider);
+    // Agora passamos a data ('targetDate') para o Provider (o "Family" precisa deste argumento!)
+    final weatherAsync = ref.watch(weatherProvider(targetDate));
     
     final title = targetDate != null ? 'PREVISÃO PARA O TREINO' : 'PREVISÃO DE HOJE';
 

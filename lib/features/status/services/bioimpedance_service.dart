@@ -20,9 +20,9 @@ class Bioimpedance {
 
   factory Bioimpedance.fromJson(Map<String, dynamic> json) {
     return Bioimpedance(
-      (json['weight_kg'] as num?)?.toDouble() ?? 0.0,
-      (json['body_fat_pct'] as num?)?.toDouble() ?? 0.0,
-      (json['muscle_mass_kg'] as num?)?.toDouble() ?? 0.0,
+      (json['weight_kg'] ?? json['peso_kg'] as num?)?.toDouble() ?? 0.0,
+      (json['body_fat_pct'] ?? json['percentagem_gordura'] as num?)?.toDouble() ?? 0.0,
+      (json['muscle_mass_kg'] ?? json['massa_muscular_kg'] as num?)?.toDouble() ?? 0.0,
       bodyFatDiff: (json['body_fat_diff'] as num?)?.toDouble(),
       weightDiff: (json['weight_diff'] as num?)?.toDouble(),
       muscleMassDiff: (json['muscle_mass_diff'] as num?)?.toDouble(),
@@ -54,7 +54,15 @@ class BioimpedanceService {
     try {
       final response = await _dio.get('/athletes/me/bioimpedance/latest');
       if (response.data == null || response.data.toString().isEmpty) return null;
-      return Bioimpedance.fromJson(response.data);
+      
+      // Suporta o formato JSON Array retornado pelo Cérebro/Telegram
+      if (response.data is List) {
+        final list = response.data as List;
+        if (list.isEmpty) return null;
+        return Bioimpedance.fromJson(list.first as Map<String, dynamic>);
+      }
+
+      return Bioimpedance.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) return null; // Tratado como "sem dados"
       rethrow;

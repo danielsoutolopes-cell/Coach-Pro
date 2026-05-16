@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
-import * as schema from "./schema/index.js"; // Importa todos os seus schemas
+import * as schema from "./schema.js"; // Corrigido para apontar ao arquivo de schema recém-criado
 
 const connectionString =
   process.env.DATABASE_URL ??

@@ -1,26 +1,32 @@
 import 'dart:async';
-import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:procoach_os/core/network/dio_client.dart';
 
+/// Gerencia a transição de estado ao solicitar uma estratégia de prova para a IA.
 final raceStrategyProvider = AsyncNotifierProvider<RaceStrategyNotifier, String?>(() {
   return RaceStrategyNotifier();
 });
 
 class RaceStrategyNotifier extends AsyncNotifier<String?> {
   @override
-  FutureOr<String?> build() => null;
+  FutureOr<String?> build() {
+    // O estado inicial é nulo (nenhuma estratégia gerada ainda)
+    return null;
+  }
 
   Future<void> generateStrategy(String raceName) async {
-    state = const AsyncLoading();
+    // Coloca a UI em loading instantaneamente
+    state = const AsyncValue.loading();
+    
     try {
       final dio = ref.read(dioProvider);
-      final response = await dio.post('/athletes/me/race-strategy', data: {
-        'raceName': raceName,
-      });
-      state = AsyncData(response.data['strategy'] as String);
-    } catch (e) {
-      state = AsyncError(e, StackTrace.current);
+      
+      // Chamada real para o backend Node.js
+      final response = await dio.post('/ai/race-strategy', data: {'race_name': raceName});
+      state = AsyncValue.data(response.data['strategy']);
+      
+    } catch (e, stackTrace) {
+      state = AsyncValue.error(e, stackTrace);
     }
   }
 }

@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:procoach_os/core/router/scaffold_with_navbar.dart';
 import 'package:procoach_os/features/dashboard/screens/dashboard_screen.dart';
-import 'package:procoach_os/features/inventory/screens/inventory_screen.dart';
 import 'package:procoach_os/features/dashboard/screens/next_workout_screen.dart';
 import 'package:procoach_os/features/status/screens/status_screen.dart';
 import 'package:procoach_os/shared/models/plan_screen.dart';
+import 'package:procoach_os/shared/models/shoes_screen.dart';
 
 /// Provider que expõe as nossas Rotas. 
 /// Utilizar Riverpod aqui permite que futuramente façamos redirecionamentos 
@@ -62,7 +62,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/inventory',
-                builder: (context, state) => const InventoryScreen(),
+                builder: (context, state) => const ShoesScreen(),
               ),
             ],
           ),

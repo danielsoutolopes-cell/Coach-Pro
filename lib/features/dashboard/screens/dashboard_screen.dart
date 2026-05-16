@@ -53,6 +53,15 @@ class DashboardScreen extends ConsumerWidget {
               
           // Modo Race Day ativa nos 3 dias antecedentes à prova âncora
           final isRaceDayMode = anchorRace != null && daysToRace >= 0 && daysToRace <= 3;
+          
+          // Calcula a semana atual do Macrociclo (1 a 16)
+          int currentWeek = 0;
+          if (anchorRace != null) {
+            final planStart = anchorRace.date.subtract(const Duration(days: 16 * 7));
+            final daysSinceStart = now.difference(planStart).inDays;
+            currentWeek = (daysSinceStart ~/ 7) + 1;
+            currentWeek = currentWeek.clamp(1, 16); // Garante que o valor fique entre 1 e 16
+          }
 
           return RefreshIndicator(
             onRefresh: () => ref.refresh(athleteProvider.future),
@@ -76,8 +85,9 @@ class DashboardScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
                 
-                if (isRaceDayMode) ...[
-                  RaceDayCard(race: anchorRace, daysToRace: daysToRace),
+                // Exibe o card sempre que houver prova âncora para acompanhar o progresso!
+                if (anchorRace != null) ...[
+                  RaceDayCard(race: anchorRace, daysToRace: daysToRace, currentWeek: currentWeek, isRaceDayMode: isRaceDayMode),
                   const SizedBox(height: 16),
                 ],
                 

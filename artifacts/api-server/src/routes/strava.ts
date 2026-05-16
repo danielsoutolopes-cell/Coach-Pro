@@ -275,7 +275,8 @@ router.get("/strava/status-device", async (req: Request, res: Response) => {
   res.json({ connected: true, configured: isConfigured(), lastSyncAt: rows[0].lastSyncAt?.toISOString() ?? null });
 });
 
-router.post("/strava/sync-device", async (req: Request, res: Response) => {
+// Escuta tanto o padrão legado de device quanto a rota simplificada nova chamanda pelo Flutter (/strava/sync)
+router.post(["/strava/sync-device", "/strava/sync"], async (req: Request, res: Response) => {
   const { deviceId: raw, raceDate } = req.body as { deviceId?: string; raceDate?: string };
   const deviceId = (raw ?? "").trim() || MONO_DEVICE_ID;
   const athlete = await getAthleteByDeviceId(deviceId);
@@ -292,8 +293,10 @@ router.post("/strava/sync-device", async (req: Request, res: Response) => {
   );
 
   await db.update(stravaTokensTable).set({ lastSyncAt: new Date() }).where(eq(stravaTokensTable.athleteId, athlete.id));
+  
+  // Busca as pendências de corridas sem tênis e já retorna as chaves prontas em camelCase
   const pending = await db.execute(sql`
-    SELECT id, entry_date, distance_km, duration_min
+    SELECT id, entry_date AS "entryDate", distance_km AS "distanceKm", duration_min AS "durationMin"
     FROM procoach_workout_entries
     WHERE athlete_id = ${athlete.id}
       AND source = 'strava'
