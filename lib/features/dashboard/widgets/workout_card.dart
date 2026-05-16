@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:procoach_os/features/dashboard/providers/workout_provider.dart';
-import 'package:procoach_os/features/workouts/widgets/debrief_dialog.dart';
+import 'package:procoach_os/features/dashboard/widgets/debrief_dialog.dart';
 
 class WorkoutCard extends ConsumerWidget {
   const WorkoutCard({super.key});

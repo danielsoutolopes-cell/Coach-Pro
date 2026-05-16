@@ -8,9 +8,22 @@ import admin from 'firebase-admin';
 // Inicializa o Firebase Admin SDK
 if (!admin.apps?.length) {
   try {
-    admin.initializeApp({
-      credential: admin.credential.applicationDefault(),
-    });
+    // Tenta inicializar com variáveis de ambiente explícitas (Ideal para Render, VPS, etc.)
+    if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          // O replace garante que as quebras de linha (\n) fiquem corretas ao ler do .env
+          privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        }),
+      });
+    } else {
+      // Fallback para o padrão (requer GOOGLE_APPLICATION_CREDENTIALS)
+      admin.initializeApp({
+        credential: admin.credential.applicationDefault(),
+      });
+    }
   } catch (error) {
     console.error('Firebase Admin init falhou:', error);
   }
