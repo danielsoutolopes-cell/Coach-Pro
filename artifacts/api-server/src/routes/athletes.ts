@@ -12,7 +12,7 @@ export const athletesRouter = Router();
 const upload = multer({ dest: 'uploads/' });
 
 // 1. GET /profile - Busca o perfil e estoque de géis do Atleta
-athletesRouter.get('/me/profile', async (req: Request, res: Response) => {
+athletesRouter.get(['/me/profile', '/:deviceId/profile'], async (req: Request, res: Response) => {
   try {
     const id = await getOrCreateMonoAthleteId();
     const rows = await db.select().from(athletesTable).where(eq(athletesTable.id, id)).limit(1);
@@ -48,7 +48,7 @@ athletesRouter.get('/me/profile', async (req: Request, res: Response) => {
 });
 
 // 10. POST /race-strategy - Gera a Estratégia de Prova com Gemini
-athletesRouter.post('/me/race-strategy', async (req: Request, res: Response) => {
+athletesRouter.post(['/me/race-strategy', '/:deviceId/race-strategy'], async (req: Request, res: Response) => {
   try {
     const { raceName } = req.body;
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
@@ -68,7 +68,7 @@ Seja direto, inspirador e não use formatação markdown excessiva além dos bul
 });
 
 // 2. PATCH /gels - Atualiza o estoque de géis (Atualização Otimista)
-athletesRouter.patch('/me/gels', async (req: Request, res: Response) => {
+athletesRouter.patch(['/me/gels', '/:deviceId/gels'], async (req: Request, res: Response) => {
   try {
     const id = await getOrCreateMonoAthleteId();
     const { gel_inventory } = req.body;
@@ -83,7 +83,7 @@ athletesRouter.patch('/me/gels', async (req: Request, res: Response) => {
 });
 
 // 3. GET /shoes - Retorna a Rotação de Tênis
-athletesRouter.get('/me/shoes', async (req: Request, res: Response) => {
+athletesRouter.get(['/me/shoes', '/:deviceId/shoes'], async (req: Request, res: Response) => {
   try {
     const id = await getOrCreateMonoAthleteId();
     const rows = await db.execute(sql`
@@ -101,7 +101,7 @@ athletesRouter.get('/me/shoes', async (req: Request, res: Response) => {
 });
 
 // 4. GET /workouts/today - Lê da tabela plan_sessions a missão do dia
-athletesRouter.get('/me/workouts/today', async (req: Request, res: Response) => {
+athletesRouter.get(['/me/workouts/today', '/:deviceId/workouts/today'], async (req: Request, res: Response) => {
   try {
     const id = await getOrCreateMonoAthleteId();
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
@@ -135,7 +135,7 @@ athletesRouter.get('/me/workouts/today', async (req: Request, res: Response) => 
 });
 
 // 5. GET /bioimpedance/latest - Busca o último registro de biometria lançado
-athletesRouter.get('/me/bioimpedance/latest', async (req: Request, res: Response) => {
+athletesRouter.get(['/me/bioimpedance/latest', '/:deviceId/bioimpedance/latest'], async (req: Request, res: Response) => {
   try {
     const id = await getOrCreateMonoAthleteId();
     const rows = await db.execute(sql`
@@ -183,7 +183,7 @@ athletesRouter.get('/me/bioimpedance/latest', async (req: Request, res: Response
 });
 
 // 6. POST /bioimpedance/upload - Recebe o PDF vindo do Flutter
-athletesRouter.post('/me/bioimpedance/upload', upload.single('file'), async (req: Request, res: Response) => {
+athletesRouter.post(['/me/bioimpedance/upload', '/:deviceId/bioimpedance/upload'], upload.single('file'), async (req: Request, res: Response) => {
   try {
     const id = await getOrCreateMonoAthleteId();
     if (!req.file) {
@@ -264,7 +264,7 @@ Caso alguma métrica não exista no documento, retorne null no valor. Responda a
 });
 
 // 7. GET /compliance/week - Retorna os dados da semana atual para o gráfico (Segunda a Domingo)
-athletesRouter.get('/me/compliance/week', async (req: Request, res: Response) => {
+athletesRouter.get(['/me/compliance/week', '/:deviceId/compliance/week'], async (req: Request, res: Response) => {
   try {
     const id = await getOrCreateMonoAthleteId();
 
@@ -318,7 +318,7 @@ athletesRouter.get('/me/compliance/week', async (req: Request, res: Response) =>
 });
 
 // 8. GET /workouts/next - Retorna o próximo treino planejado (amanhã em diante)
-athletesRouter.get('/me/workouts/next', async (req: Request, res: Response) => {
+athletesRouter.get(['/me/workouts/next', '/:deviceId/workouts/next'], async (req: Request, res: Response) => {
   try {
     const id = await getOrCreateMonoAthleteId();
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
@@ -353,7 +353,7 @@ athletesRouter.get('/me/workouts/next', async (req: Request, res: Response) => {
 });
 
 // 9. POST /workouts/feedback - Recebe RPE e Dor (Debrief)
-athletesRouter.post('/me/workouts/feedback', async (req: Request, res: Response) => {
+athletesRouter.post(['/me/workouts/feedback', '/:deviceId/workouts/feedback'], async (req: Request, res: Response) => {
   try {
     const id = await getOrCreateMonoAthleteId();
     const { rpe, painLevel } = req.body;
@@ -366,7 +366,7 @@ athletesRouter.post('/me/workouts/feedback', async (req: Request, res: Response)
 });
 
 // 11. PATCH /push-token - Salva o token do Firebase (FCM) no banco
-athletesRouter.patch('/me/push-token', async (req: Request, res: Response) => {
+athletesRouter.patch(['/me/push-token', '/:deviceId/push-token'], async (req: Request, res: Response) => {
   try {
     const id = await getOrCreateMonoAthleteId();
     const { token } = req.body;
@@ -387,7 +387,7 @@ athletesRouter.patch('/me/push-token', async (req: Request, res: Response) => {
 });
 
 // 12. GET /strength-routines - Busca as fichas de força (A/B/C)
-athletesRouter.get('/me/strength-routines', async (req: Request, res: Response) => {
+athletesRouter.get(['/me/strength-routines', '/:deviceId/strength-routines'], async (req: Request, res: Response) => {
   try {
     const id = await getOrCreateMonoAthleteId();
     const rows = await db.execute(sql`
@@ -405,7 +405,7 @@ athletesRouter.get('/me/strength-routines', async (req: Request, res: Response) 
 });
 
 // 13. POST /strength-routine - Salva ou atualiza uma ficha (A, B ou C)
-athletesRouter.post('/me/strength-routine', async (req: Request, res: Response) => {
+athletesRouter.post(['/me/strength-routine', '/:deviceId/strength-routine'], async (req: Request, res: Response) => {
   try {
     const id = await getOrCreateMonoAthleteId();
     const { routineType, name, exercises } = req.body;
@@ -433,7 +433,7 @@ athletesRouter.post('/me/strength-routine', async (req: Request, res: Response) 
 });
 
 // 14. GET /plan-sessions - Busca todos os treinos planejados
-athletesRouter.get('/me/plan-sessions', async (req: Request, res: Response) => {
+athletesRouter.get(['/me/plan-sessions', '/:deviceId/plan-sessions'], async (req: Request, res: Response) => {
   try {
     const id = await getOrCreateMonoAthleteId();
     const rows = await db.execute(sql`

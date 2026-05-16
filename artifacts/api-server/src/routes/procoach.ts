@@ -2431,4 +2431,22 @@ router.post("/procoach/athletes/:deviceId/gel-usage", async (req: Request, res: 
   res.json({ gelsInStock: after, gelsUsed: used, entryDate, context: ctx });
 });
 
+router.get("/procoach/weather", async (req: Request, res: Response) => {
+  try {
+    const HOME_LAT = -23.6087;
+    const HOME_LON = -46.6676;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${HOME_LAT}&longitude=${HOME_LON}&current=temperature_2m,weathercode,windspeed_10m,precipitation,is_day&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=America%2FSao_Paulo`;
+    const r = await fetch(url);
+    if (!r.ok) {
+      res.status(502).json({ error: "Weather API error" });
+      return;
+    }
+    const data = await r.json();
+    res.json(data);
+  } catch (err) {
+    console.error("Erro ao buscar clima:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 export default router;
