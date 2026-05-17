@@ -221,12 +221,13 @@ async function ensurePlanTable(): Promise<void> {
 
 // ─── Gemini AI intent classification ────────────────────────────────────────────
 async function classifyIntent(text: string): Promise<string> {
-  const key = process.env.GEMINI_API_KEY;
+  const key = (process.env.GEMINI_API_KEY || "").replace(/^['"`]+|['"`]+$/g, "").trim();
   if (!key) return "UNKNOWN";
 
   try {
     const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }, { apiVersion: "v1beta" });
+    const modelName = (process.env.GEMINI_MODEL || "gemini-1.5-flash").replace(/^['"`]+|['"`]+$/g, "").trim();
+    const model = genAI.getGenerativeModel({ model: modelName }, { apiVersion: "v1beta" });
     const prompt = `Classifica a mensagem do utilizador em UMA dessas categorias: MENU | CONSULTA | FIM | LARGADA | CHEGADA | BIOMETRIA | TELEMETRIA | PLANOHOJE | COMPLIANCE | UNKNOWN. Responde APENAS com a categoria em maiúsculas, sem explicação.\n\nMensagem do usuário: "${text}"`;
     const result = await model.generateContent(prompt);
     return result.response.text().trim().toUpperCase();

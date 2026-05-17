@@ -99,12 +99,12 @@ async function generateWithGemini(params: {
   systemPrompt: string;
   userPrompt: string;
 }): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = (process.env.GEMINI_API_KEY || "").replace(/^['"`]+|['"`]+$/g, "").trim();
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY is not set");
   }
 
-  const model = process.env.GEMINI_MODEL ?? "gemini-1.5-flash";
+  const model = (process.env.GEMINI_MODEL || "gemini-1.5-flash").replace(/^['"`]+|['"`]+$/g, "").trim();
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model,
   )}:generateContent?key=${encodeURIComponent(apiKey)}`;

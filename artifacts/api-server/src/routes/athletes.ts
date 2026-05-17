@@ -103,9 +103,11 @@ athletesRouter.get(['/me/profile', '/:deviceId/profile'], async (req: Request, r
 athletesRouter.post(['/me/race-strategy', '/:deviceId/race-strategy'], async (req: Request, res: Response) => {
   try {
     const { raceName } = req.body;
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
+    const apiKey = (process.env.GEMINI_API_KEY || "").replace(/^['"`]+|['"`]+$/g, "").trim();
+    const modelName = (process.env.GEMINI_MODEL || "gemini-1.5-flash").replace(/^['"`]+|['"`]+$/g, "").trim();
+    const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel(
-      { model: process.env.GEMINI_MODEL || "gemini-1.5-flash" },
+      { model: modelName },
       { apiVersion: "v1beta" }
     );
 
@@ -263,10 +265,12 @@ athletesRouter.post(['/me/bioimpedance/upload', '/:deviceId/bioimpedance/upload'
     const fileBytes = fs.readFileSync(req.file.path);
     const base64Data = fileBytes.toString('base64');
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
+    const apiKey = (process.env.GEMINI_API_KEY || "").replace(/^['"`]+|['"`]+$/g, "").trim();
+    const modelName = (process.env.GEMINI_MODEL || "gemini-1.5-flash").replace(/^['"`]+|['"`]+$/g, "").trim();
+    const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel(
-      { model: process.env.GEMINI_MODEL || "gemini-1.5-flash" },
-      { apiVersion: "v1" }
+      { model: modelName },
+      { apiVersion: "v1beta" }
     );
 
     const prompt = `Você é um especialista em nutrição e leitura de exames.

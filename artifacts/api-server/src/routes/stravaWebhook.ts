@@ -98,12 +98,12 @@ async function sendTelegram(text: string): Promise<void> {
 }
 
 async function generateWithGemini(prompt: string): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = (process.env.GEMINI_API_KEY || "").replace(/^['"`]+|['"`]+$/g, "").trim();
   if (!apiKey) return "IA não configurada.";
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const modelName = process.env.GEMINI_MODEL ?? "gemini-1.5-flash";
+    const modelName = (process.env.GEMINI_MODEL || "gemini-1.5-flash").replace(/^['"`]+|['"`]+$/g, "").trim();
     const model = genAI.getGenerativeModel({ model: modelName }, { apiVersion: "v1beta" });
     const result = await model.generateContent(prompt);
     return result.response.text();
