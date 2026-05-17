@@ -92,7 +92,7 @@ class ShoesScreen extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
-                      const Text('📦', style: TextStyle(fontSize: 24)),
+                      const Icon(Icons.inventory_2, size: 24, color: Colors.deepOrangeAccent),
                       const SizedBox(width: 12),
                       Text(
                         '${athlete.gelInventory} unidades',

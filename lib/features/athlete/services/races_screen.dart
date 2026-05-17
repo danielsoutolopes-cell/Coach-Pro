@@ -132,7 +132,7 @@ class RacesScreen extends ConsumerWidget {
                 Text(race.name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 Text(
-                  '${race.date.day}/${race.date.month}/${race.date.year}  •  Prioridade: ${race.priority ?? "P1"}', 
+                  '${race.date.day}/${race.date.month}/${race.date.year}  -  Prioridade: ${race.priority ?? "P1"}', 
                   style: const TextStyle(color: Colors.grey, fontSize: 13)
                 ),
               ],

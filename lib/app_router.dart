@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:procoach_os/core/router/scaffold_with_navbar.dart';
+import 'package:procoach_os/scaffold_with_navbar.dart';
 import 'package:procoach_os/features/dashboard/screens/dashboard_screen.dart';
 import 'package:procoach_os/features/inventory/screens/inventory_screen.dart';
 import 'package:procoach_os/features/status/screens/status_screen.dart';

@@ -172,9 +172,9 @@ class StatusScreen extends ConsumerWidget {
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildBioItem('⚖️', bio.weightKg.toString(), 'kg', diff: bio.weightDiff),
-                  _buildBioItem('🔥', bio.bodyFatPct.toString(), '% Gordura', diff: bio.bodyFatDiff),
-                  _buildBioItem('💪', bio.muscleMassKg.toString(), 'kg Músculo', diff: bio.muscleMassDiff, invertColors: true),
+                  _buildBioItem(Icons.balance, bio.weightKg.toString(), 'kg', diff: bio.weightDiff),
+                  _buildBioItem(Icons.local_fire_department, bio.bodyFatPct.toString(), '% Gordura', diff: bio.bodyFatDiff),
+                  _buildBioItem(Icons.fitness_center, bio.muscleMassKg.toString(), 'kg Músculo', diff: bio.muscleMassDiff, invertColors: true),
                 ],
               );
             },
@@ -231,10 +231,10 @@ class StatusScreen extends ConsumerWidget {
     }
   }
 
-  Widget _buildBioItem(String emoji, String value, String label, {double? diff, bool invertColors = false}) {
+  Widget _buildBioItem(IconData icon, String value, String label, {double? diff, bool invertColors = false}) {
     return Column(
       children: [
-        Text(emoji, style: const TextStyle(fontSize: 24)),
+        Icon(icon, size: 24, color: Colors.deepOrangeAccent),
         const SizedBox(height: 8),
         Row(
           mainAxisSize: MainAxisSize.min,

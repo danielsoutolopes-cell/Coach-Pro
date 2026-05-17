@@ -19,7 +19,7 @@ router.post("/ai/race-strategy", async (req: Request, res: Response) => {
     // Forçamos a apiVersion para 'v1' para resolver o erro 404 do endpoint v1beta.
     const model = genAI.getGenerativeModel(
       { model: "gemini-1.5-flash" },
-      { apiVersion: "v1" }
+      { apiVersion: "v1beta" }
     );
     
     const prompt = `Você é um treinador de corrida de elite do aplicativo ProCoach OS. Crie uma estratégia de prova direta, motivadora e em bullet points para a seguinte corrida: ${race_name}. Foco em pace, hidratação, nutrição e mentalidade. Mantenha curto e grosso (máximo de 4 tópicos breves).`;

@@ -10,6 +10,7 @@ import 'package:procoach_os/shared/widgets/async_value_widget.dart';
 import 'package:procoach_os/core/providers/location_provider.dart';
 import 'package:procoach_os/features/dashboard/providers/weather_provider.dart';
 import 'package:procoach_os/features/dashboard/providers/workout_provider.dart';
+import 'package:procoach_os/features/athlete/services/races_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -84,11 +85,21 @@ class DashboardScreen extends ConsumerWidget {
                       today.toUpperCase(),
                       style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold),
                     ),
-                    if (anchorRace != null)
-                      Text(
-                        '$daysToRace DIAS P/ PROVA',
-                        style: const TextStyle(color: Colors.deepOrangeAccent, fontSize: 14, fontWeight: FontWeight.bold),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RacesScreen()));
+                      },
+                      child: Row(
+                        children: [
+                          Text(
+                            anchorRace != null ? '$daysToRace DIAS P/ PROVA' : 'CADASTRAR PROVA',
+                            style: const TextStyle(color: Colors.deepOrangeAccent, fontSize: 14, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.deepOrangeAccent),
+                        ],
                       ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),

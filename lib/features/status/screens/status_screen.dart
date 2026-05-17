@@ -83,8 +83,8 @@ class StatusScreen extends ConsumerWidget {
                 final barGroups = data.asMap().entries.map((entry) {
                   final index = entry.key;
                   final item = entry.value;
-                  final weight = (item['weight_kg'] as num?)?.toDouble() ?? 0;
-                  final fat = (item['body_fat_pct'] as num?)?.toDouble() ?? 0;
+                  final weight = double.tryParse(item['weight_kg']?.toString() ?? '') ?? 0.0;
+                  final fat = double.tryParse(item['body_fat_pct']?.toString() ?? '') ?? 0.0;
 
                   return BarChartGroupData(
                     x: index,
@@ -98,7 +98,7 @@ class StatusScreen extends ConsumerWidget {
 
                 double maxY = 0;
                 for (var item in data) {
-                  final w = (item['weight_kg'] as num?)?.toDouble() ?? 0;
+                  final w = double.tryParse(item['weight_kg']?.toString() ?? '') ?? 0.0;
                   if (w > maxY) maxY = w;
                 }
 
@@ -202,9 +202,9 @@ class StatusScreen extends ConsumerWidget {
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildBioItem('⚖️', bio.weightKg.toString(), 'kg', diff: bio.weightDiff),
-                  _buildBioItem('🔥', bio.bodyFatPct.toString(), '% Gordura', diff: bio.bodyFatDiff),
-                  _buildBioItem('💪', bio.muscleMassKg.toString(), 'kg Músculo', diff: bio.muscleMassDiff, invertColors: true),
+                  _buildBioItem(Icons.balance, bio.weightKg.toString(), 'kg', diff: bio.weightDiff),
+                  _buildBioItem(Icons.local_fire_department, bio.bodyFatPct.toString(), '% Gordura', diff: bio.bodyFatDiff),
+                  _buildBioItem(Icons.fitness_center, bio.muscleMassKg.toString(), 'kg Músculo', diff: bio.muscleMassDiff, invertColors: true),
                 ],
               );
             },
@@ -261,10 +261,10 @@ class StatusScreen extends ConsumerWidget {
     }
   }
 
-  Widget _buildBioItem(String emoji, String value, String label, {double? diff, bool invertColors = false}) {
+  Widget _buildBioItem(IconData icon, String value, String label, {double? diff, bool invertColors = false}) {
     return Column(
       children: [
-        Text(emoji, style: const TextStyle(fontSize: 24)),
+        Icon(icon, size: 24, color: Colors.deepOrangeAccent),
         const SizedBox(height: 8),
         Row(
           mainAxisSize: MainAxisSize.min,

@@ -55,7 +55,7 @@ class InventoryScreen extends ConsumerWidget {
           const Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('🥤', style: TextStyle(fontSize: 28)),
+              Icon(Icons.local_drink, size: 28, color: Colors.deepOrangeAccent),
               SizedBox(width: 8),
               Text(
                 'ESTOQUE DE GÉIS',
